@@ -1,5 +1,5 @@
 {
-  "name": "Now U See Me",
+  "name": "NEARBY",
   "description": "An AI-powered local discovery platform that uses Gemini and Google Maps grounding to find the best services and products near you instantly.",
   "requestFramePermissions": [
     "geolocation"

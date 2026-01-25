@@ -26,8 +26,8 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
 
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(place.uri)}`,
-    twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(place.uri)}&text=${encodeURIComponent(`Check out ${place.title} on Now U See Me!`)}`,
-    whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(`Check out ${place.title} on Now U See Me! ${place.uri}`)}`
+    twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(place.uri)}&text=${encodeURIComponent(`Check out ${place.title} on NEARBY!`)}`,
+    whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(`Check out ${place.title} on NEARBY! ${place.uri}`)}`
   };
 
   const handleSocialClick = (e: React.MouseEvent, url: string) => {

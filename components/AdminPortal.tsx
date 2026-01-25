@@ -136,7 +136,7 @@ const AdminPortal: React.FC<AdminPortalProps> = ({ onClose }) => {
                <div className="p-12 text-center h-full flex flex-col items-center justify-center">
                  <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center text-3xl mb-6">📩</div>
                  <h3 className="text-2xl font-black text-slate-800 mb-2">Incoming Applications</h3>
-                 <p className="text-slate-500 text-sm max-w-sm mb-8">Review and verify businesses applying to the Now U See Me marketplace.</p>
+                 <p className="text-slate-500 text-sm max-w-sm mb-8">Review and verify businesses applying to the NEARBY marketplace.</p>
                  <div className="w-full max-w-2xl bg-slate-50 rounded-3xl p-6 text-left border border-slate-100">
                     <div className="flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm mb-3">
                        <div>

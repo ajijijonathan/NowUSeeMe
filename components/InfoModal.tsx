@@ -17,7 +17,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ type, onClose }) => {
     setTimeout(() => {
       setIsApplying(false);
       setHasApplied(true);
-      window.location.href = "mailto:lujoratechnologies@outlook.com?subject=Merchant Partnership Application - Now U See Me";
+      window.location.href = "mailto:lujoratechnologies@outlook.com?subject=Merchant Partnership Application - NEARBY";
     }, 1500);
   };
 
@@ -28,7 +28,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ type, onClose }) => {
         <div className="space-y-6 text-slate-600 text-sm leading-relaxed">
           <section>
             <h4 className="font-black text-slate-900 uppercase tracking-widest text-[10px] mb-2">1. Ecosystem Usage</h4>
-            <p>Now U See Me is an AI discovery layer. Usage of our API-driven search constitutes acceptance of real-time location processing as per Lujora Technologies governance standards.</p>
+            <p>NEARBY is an AI discovery layer. Usage of our API-driven search constitutes acceptance of real-time location processing as per Lujora Technologies governance standards.</p>
           </section>
           <section>
             <h4 className="font-black text-slate-900 uppercase tracking-widest text-[10px] mb-2">2. Merchant Integrity</h4>

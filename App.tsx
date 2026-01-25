@@ -10,7 +10,7 @@ import InfoModal from './components/InfoModal';
 type ViewMode = 'grid' | 'map';
 type InfoType = 'terms' | 'privacy' | 'contact';
 
-const RECENT_STORAGE_KEY = 'nowuseeme_recent_views';
+const RECENT_STORAGE_KEY = 'nearby_recent_views';
 
 const App: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -106,7 +106,7 @@ const App: React.FC = () => {
               <span className="text-white font-black text-2xl">N</span>
             </div>
             <h1 className="brand-font text-2xl font-black text-slate-800 tracking-tighter cursor-pointer" onClick={() => {setResult(null); setQuery('');}}>
-              now <span className="text-indigo-600">u</span> see me
+              NEAR<span className="text-indigo-600">BY</span>
             </h1>
           </div>
 
@@ -266,7 +266,7 @@ const App: React.FC = () => {
           <div className="space-y-6">
              <div className="flex items-center space-x-3">
                <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center font-black text-white text-lg">N</div>
-               <span className="brand-font font-black text-2xl tracking-tighter">now <span className="text-indigo-600">u</span> see me</span>
+               <span className="brand-font font-black text-2xl tracking-tighter">NEAR<span className="text-indigo-600">BY</span></span>
              </div>
              <p className="text-slate-400 text-sm font-medium leading-relaxed">
                The local marketplace engine powered by Gemini AI. Bridging the gap between high-tech discovery and local commerce.
@@ -294,7 +294,7 @@ const App: React.FC = () => {
           </div>
         </div>
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between text-slate-300 text-[10px] font-black uppercase tracking-[0.2em] space-y-4 md:space-y-0">
-          <div>© 2024 NOW U SEE ME. ALL RIGHTS RESERVED.</div>
+          <div>© 2024 NEARBY. ALL RIGHTS RESERVED.</div>
           <div className="flex space-x-8">
             <button onClick={() => setActiveInfo('privacy')} className="hover:text-slate-900 transition-colors">Privacy Infrastructure</button>
             <button onClick={() => setActiveInfo('terms')} className="hover:text-slate-900 transition-colors">Governance Terms</button>
