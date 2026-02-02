@@ -2,38 +2,32 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Location, SearchResponse, PlaceResult, WeatherData, PlaceType } from "../types";
 
+// Fix: Strictly following the initialization guidelines by using process.env.API_KEY directly
 const getAIClient = () => {
-  // Always use a fresh instance as per guidelines to ensure the latest API key is used
-  return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const fetchWeatherForLocation = async (location: Location): Promise<WeatherData | null> => {
   try {
     const ai = getAIClient();
-    /**
-     * Using gemini-2.5-flash which is highly robust for grounding tools like googleSearch.
-     * The 500/6 RPC error often occurs when combining tools with strict responseMimeType 
-     * in specific experimental proxy environments. We'll handle parsing manually for stability.
-     */
+    // Fix: Using gemini-3-flash-preview for basic text Q&A tasks as per guidelines
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: `What is the current weather at coordinates (${location.latitude}, ${location.longitude})? 
-      Return only a JSON object with these keys: "temp" (string, e.g. "22°C"), "condition" (string, e.g. "Sunny"), "emoji" (string, e.g. "☀️"), "locationName" (string, e.g. "Lagos"). 
+      Return only a JSON object with these keys: "temp" (string, e.g. "22°C"), "condition" (string, e.g. "Sunny"), "emoji" (string, e.g. "☀️"), "locationName" (string, e.g. "San Francisco"). 
+      Identify the location accurately based on the coordinates.
       Do not include any text outside the JSON.`,
       config: {
         tools: [{ googleSearch: {} }],
-        // Omitted responseMimeType to resolve ProxyUnaryCall 500/6 errors
       }
     });
 
     const text = response.text || '';
-    // Resilient extraction of JSON from the response text
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
     }
     
-    // Secondary fallback parse
     if (text.trim().startsWith('{')) {
        return JSON.parse(text.trim());
     }
@@ -51,7 +45,7 @@ export const searchLocalContent = async (
 ): Promise<SearchResponse> => {
   try {
     const ai = getAIClient();
-    // Maps grounding requires gemini-2.5 series per documentation
+    // Fix: Maps grounding is only supported in Gemini 2.5 series models
     const modelName = 'gemini-2.5-flash';
     
     const config: any = {
@@ -70,8 +64,8 @@ export const searchLocalContent = async (
     }
 
     const prompt = `Find "${query}" near ${location ? `the user at (${location.latitude}, ${location.longitude})` : 'me'}. 
-    Classify each result as either a 'market', 'service', 'emergency', or 'lifestyle'.
-    Provide a professional summary of the local scene.
+    This is a global search. Classify each result as either a 'market', 'service', 'emergency', or 'lifestyle'.
+    Provide a professional summary of the local scene in this specific area.
     Then, for the places found, provide their metadata in a structured way.
     FORMAT AT THE END: JSON_META: [{"title": "Name", "lat": 0.0, "lng": 0.0, "type": "market/service/emergency/lifestyle"}]`;
 
@@ -106,7 +100,6 @@ export const searchLocalContent = async (
         
         let distanceStr = undefined;
         if (location && meta?.lat) {
-          // Calculate approximate distance (Haversine-lite)
           const d = Math.sqrt(Math.pow(location.latitude - meta.lat, 2) + Math.pow(location.longitude - meta.lng, 2)) * 111;
           distanceStr = d.toFixed(1) + " km";
         }
@@ -114,8 +107,8 @@ export const searchLocalContent = async (
         return {
           title,
           uri: chunk.maps?.uri || chunk.web?.uri || "#",
-          isPromoted: index === 0 && Math.random() > 0.5, 
-          isVerified: Math.random() > 0.3,
+          isPromoted: index === 0 && Math.random() > 0.8, 
+          isVerified: Math.random() > 0.4,
           lat: meta?.lat,
           lng: meta?.lng,
           type: meta?.type || 'market',

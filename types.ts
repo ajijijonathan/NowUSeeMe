@@ -6,6 +6,14 @@ export interface Location {
 
 export type PlaceType = 'market' | 'service' | 'emergency' | 'lifestyle';
 
+export interface Review {
+  id: string;
+  rating: number;
+  text: string;
+  author: string;
+  createdAt: number;
+}
+
 export interface PlaceResult {
   title: string;
   uri: string;
@@ -16,6 +24,7 @@ export interface PlaceResult {
   lng?: number;
   type?: PlaceType;
   distance?: string;
+  reviews?: Review[];
 }
 
 export interface RecentPlace extends PlaceResult {
@@ -41,13 +50,17 @@ export interface Category {
   icon: string;
 }
 
+export type BillingStatus = 'paid' | 'overdue' | 'trial';
+
 export interface MerchantRequest {
   id: string;
   businessName: string;
   status: 'pending' | 'active';
-  bidAmount: number;
+  bidAmount: number; // Daily budget for AI visibility
   category: string;
   appliedDate: string;
+  billingStatus?: BillingStatus;
+  visibilityScore?: number; // Calculated weight for search ranking
 }
 
 export const CATEGORIES: Category[] = [
@@ -62,3 +75,5 @@ export const CATEGORIES: Category[] = [
 export const SEARCH_SUGGESTIONS = [
   "Farmers markets", "Reliable plumbers", "24/7 Pharmacies", "Auto repair shops", "Tailors near me", "Fresh produce"
 ];
+
+export type InfoType = 'terms' | 'privacy' | 'contact' | 'help' | 'economics';

@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { PlaceResult, PlaceType } from '../types';
+import React, { useState, useEffect } from 'react';
+import { PlaceResult, PlaceType, Review } from '../types';
 
 interface PlaceCardProps {
   place: PlaceResult;
@@ -9,7 +9,62 @@ interface PlaceCardProps {
 }
 
 const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false }) => {
-  const isMapLink = place.uri.includes('google.com/maps');
+  const [showReviews, setShowReviews] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [newReviewText, setNewReviewText] = useState('');
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Load reviews from localStorage on mount or when place URI changes
+  useEffect(() => {
+    if (compact) return;
+    const storageKey = `nearby_reviews_${btoa(place.uri)}`;
+    const savedReviews = localStorage.getItem(storageKey);
+    if (savedReviews) {
+      try {
+        setReviews(JSON.parse(savedReviews));
+      } catch (e) {
+        console.error("Failed to parse reviews", e);
+      }
+    }
+  }, [place.uri, compact]);
+
+  const handleAddReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReviewText.trim()) return;
+
+    setIsSubmitting(true);
+    
+    const newReview: Review = {
+      id: Date.now().toString(),
+      author: 'You',
+      text: newReviewText,
+      rating: newReviewRating,
+      createdAt: Date.now()
+    };
+
+    const updatedReviews = [newReview, ...reviews];
+    setReviews(updatedReviews);
+    
+    const storageKey = `nearby_reviews_${btoa(place.uri)}`;
+    localStorage.setItem(storageKey, JSON.stringify(updatedReviews));
+    
+    setNewReviewText('');
+    setNewReviewRating(5);
+    
+    setTimeout(() => {
+      setIsSubmitting(false);
+    }, 400);
+  };
+
+  const handleReport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmed = window.confirm(`Report "${place.title}" for review? This flags the business for our administrative team to verify its data integrity.`);
+    if (confirmed) {
+      console.log(`[NEARBY REPORT] Business: ${place.title}, URI: ${place.uri}, Timestamp: ${new Date().toISOString()}`);
+      alert("Report submitted successfully. Thank you for maintaining ecosystem integrity.");
+    }
+  };
 
   const getTypeStyle = (type?: PlaceType) => {
     switch (type) {
@@ -73,7 +128,7 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
   }
 
   return (
-    <div className={`relative rounded-[2rem] shadow-sm border p-6 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 flex flex-col group ${
+    <div className={`relative rounded-[2rem] shadow-sm border p-6 hover:shadow-xl transition-all duration-500 flex flex-col group ${
       place.isPromoted 
         ? 'bg-gradient-to-br from-white to-indigo-50/50 border-indigo-200' 
         : 'bg-white border-slate-100'
@@ -110,34 +165,119 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
              </span>
           )}
           <span className="text-[10px] font-bold text-emerald-500 flex items-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span> Open Now
+            <span className="relative flex h-2 w-2 mr-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            Open Now
           </span>
         </div>
       </div>
+
+      {/* Reviews Toggle Section */}
+      <div className="mt-6 border-t border-slate-100 pt-4">
+        <button 
+          onClick={() => setShowReviews(!showReviews)}
+          className="flex items-center justify-between w-full text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors"
+        >
+          <span>User Reviews ({reviews.length})</span>
+          <span>{showReviews ? '▴' : '▾'}</span>
+        </button>
+
+        {showReviews && (
+          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            {/* Review List */}
+            <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+              {reviews.length === 0 ? (
+                <p className="text-[10px] text-slate-400 italic">No reviews yet. Be the first!</p>
+              ) : (
+                reviews.map((rev) => (
+                  <div key={rev.id} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-[9px] font-black text-slate-900">{rev.author}</span>
+                      <div className="flex text-amber-400 text-[8px]">
+                        {[...Array(5)].map((_, i) => (
+                          <span key={i}>{i < rev.rating ? '★' : '☆'}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-600 leading-normal">{rev.text}</p>
+                    <span className="text-[8px] text-slate-300 block mt-1">
+                      {new Date(rev.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Review Form */}
+            <form onSubmit={handleAddReview} className="mt-4 pt-4 border-t border-slate-50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] font-bold text-slate-500">Rate this place:</span>
+                <div className="flex space-x-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setNewReviewRating(star)}
+                      className={`text-sm transition-colors ${star <= newReviewRating ? 'text-amber-400' : 'text-slate-200'}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                value={newReviewText}
+                onChange={(e) => setNewReviewText(e.target.value)}
+                placeholder="Share your experience..."
+                className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs text-slate-800 placeholder:text-slate-300 focus:ring-1 focus:ring-indigo-100 resize-none min-h-[60px]"
+              />
+              <button
+                type="submit"
+                disabled={isSubmitting || !newReviewText.trim()}
+                className="mt-2 w-full bg-white border border-slate-100 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all disabled:opacity-50"
+              >
+                {isSubmitting ? 'Posting...' : 'Submit Review'}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
       
-      {/* Social Sharing Row */}
+      {/* Action Row */}
       <div className="mt-6 flex flex-col space-y-4">
-        <div className="flex items-center space-x-2">
-           <button 
-            onClick={(e) => handleSocialClick(e, shareLinks.facebook)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs"
-            title="Share on Facebook"
-          >
-            f
-          </button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+             <button 
+              onClick={(e) => handleSocialClick(e, shareLinks.facebook)}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs"
+              title="Share on Facebook"
+            >
+              f
+            </button>
+            <button 
+              onClick={(e) => handleSocialClick(e, shareLinks.twitter)}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-indigo-600 transition-all text-[10px]"
+              title="Share on X (Twitter)"
+            >
+              𝕏
+            </button>
+            <button 
+              onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-sm"
+              title="Share on WhatsApp"
+            >
+              💬
+            </button>
+          </div>
+
           <button 
-            onClick={(e) => handleSocialClick(e, shareLinks.twitter)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-indigo-600 transition-all text-[10px]"
-            title="Share on X (Twitter)"
+            onClick={handleReport}
+            className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-rose-500 transition-colors flex items-center"
+            title="Report this place"
           >
-            𝕏
-          </button>
-          <button 
-            onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-sm"
-            title="Share on WhatsApp"
-          >
-            💬
+            <span className="mr-1">🚩</span> Report
           </button>
         </div>
 

@@ -42,11 +42,11 @@ const MapView: React.FC<MapViewProps> = ({ places, userLocation, weather }) => {
       if (userLocation) {
         const userIcon = L.divIcon({
           className: 'user-marker',
-          html: `<div class="w-5 h-5 bg-blue-500 border-2 border-white rounded-full shadow-xl user-location-pulse"></div>`,
+          html: `<div class="w-5 h-5 bg-blue-500 border-2 border-white rounded-full shadow-xl user-location-pulse" role="img" aria-label="Your current location"></div>`,
           iconSize: [20, 20],
           iconAnchor: [10, 10]
         });
-        L.marker([userLocation.latitude, userLocation.longitude], { icon: userIcon })
+        L.marker([userLocation.latitude, userLocation.longitude], { icon: userIcon, keyboard: true })
           .addTo(markers)
           .bindPopup('<div class="p-1 font-bold text-slate-800">You are here</div>');
         bounds.push([userLocation.latitude, userLocation.longitude]);
@@ -58,11 +58,11 @@ const MapView: React.FC<MapViewProps> = ({ places, userLocation, weather }) => {
           const markerIcon = L.divIcon({
             className: 'place-marker',
             html: `
-              <div class="relative group">
+              <div class="relative group" role="button" tabindex="0" aria-label="Location: ${place.title}">
                 <div class="flex items-center justify-center w-9 h-9 ${place.isPromoted ? 'bg-indigo-600' : 'bg-slate-900'} text-white rounded-full shadow-2xl border-2 border-white transition-all group-hover:scale-110">
-                  <span class="text-sm">${place.isPromoted ? '⭐' : '📍'}</span>
+                  <span class="text-sm" aria-hidden="true">${place.isPromoted ? '⭐' : '📍'}</span>
                 </div>
-                ${place.isPromoted ? '<div class="absolute -inset-1.5 bg-indigo-500 rounded-full animate-pulse opacity-20"></div>' : ''}
+                ${place.isPromoted ? '<div class="absolute -inset-1.5 bg-indigo-500 rounded-full animate-pulse opacity-20" aria-hidden="true"></div>' : ''}
               </div>
             `,
             iconSize: [36, 36],
@@ -70,14 +70,14 @@ const MapView: React.FC<MapViewProps> = ({ places, userLocation, weather }) => {
             popupAnchor: [0, -18]
           });
 
-          L.marker([place.lat, place.lng], { icon: markerIcon })
+          L.marker([place.lat, place.lng], { icon: markerIcon, keyboard: true })
             .addTo(markers)
             .bindPopup(`
-              <div class="p-2 min-w-[140px]">
-                <h4 class="font-bold text-slate-900 text-sm leading-tight">${place.title}</h4>
+              <div class="p-2 min-w-[140px]" role="dialog" aria-labelledby="popup-title-${place.title.replace(/\s+/g, '-')}">
+                <h4 id="popup-title-${place.title.replace(/\s+/g, '-')}" class="font-bold text-slate-900 text-sm leading-tight">${place.title}</h4>
                 ${place.isPromoted ? '<div class="mt-1 flex items-center"><span class="bg-indigo-100 text-indigo-700 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">Promoted</span></div>' : ''}
                 <div class="mt-3">
-                  <a href="${place.uri}" target="_blank" rel="noopener noreferrer" class="block text-center bg-slate-900 text-white text-[10px] font-bold py-1.5 rounded-lg hover:bg-indigo-600 transition-colors">
+                  <a href="${place.uri}" target="_blank" rel="noopener noreferrer" class="block text-center bg-slate-900 text-white text-[10px] font-bold py-1.5 rounded-lg hover:bg-indigo-600 transition-colors" aria-label="Visit ${place.title} website">
                     Visit Business
                   </a>
                 </div>
@@ -105,14 +105,27 @@ const MapView: React.FC<MapViewProps> = ({ places, userLocation, weather }) => {
   }, [places, userLocation]);
 
   return (
-    <div className="w-full h-[550px] border border-slate-200 shadow-xl bg-slate-100 rounded-[2rem] overflow-hidden relative group">
-      <div ref={mapContainerRef} className="w-full h-full" />
+    <div 
+      className="w-full h-[550px] border border-slate-200 shadow-xl bg-slate-100 rounded-[2rem] overflow-hidden relative group"
+      role="region"
+      aria-label="Interactive map showing nearby locations"
+    >
+      <div 
+        ref={mapContainerRef} 
+        className="w-full h-full" 
+        role="application" 
+        aria-label="Map data provided by OpenStreetMap"
+      />
       
-      {/* Weather Overlay - Increased Z-index for Leaflet compatibility */}
+      {/* Weather Overlay */}
       {weather && (
-        <div className="absolute top-6 right-6 z-[1001] glass-effect p-4 rounded-3xl shadow-2xl border border-white/60 animate-in fade-in slide-in-from-right-4 duration-700">
+        <div 
+          className="absolute top-6 right-6 z-[1001] glass-effect p-4 rounded-3xl shadow-2xl border border-white/60 animate-in fade-in slide-in-from-right-4 duration-700"
+          role="complementary"
+          aria-label={`Current weather in ${weather.locationName}: ${weather.temp}, ${weather.condition}`}
+        >
           <div className="flex items-center space-x-4">
-            <div className="text-4xl filter drop-shadow-md">{weather.emoji}</div>
+            <div className="text-4xl filter drop-shadow-md" aria-hidden="true">{weather.emoji}</div>
             <div>
               <div className="text-lg font-black text-slate-900 leading-none">{weather.temp}</div>
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{weather.condition}</div>
@@ -125,7 +138,10 @@ const MapView: React.FC<MapViewProps> = ({ places, userLocation, weather }) => {
       )}
       
       {/* Map Attribution Badge */}
-      <div className="absolute bottom-4 left-4 z-[1001] bg-white/80 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 border border-white/50">
+      <div 
+        className="absolute bottom-4 left-4 z-[1001] bg-white/80 backdrop-blur px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 border border-white/50"
+        aria-hidden="true"
+      >
         LIVE INTERACTIVE MAP
       </div>
     </div>

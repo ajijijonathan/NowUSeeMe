@@ -3,179 +3,235 @@ import React, { useState, useMemo } from 'react';
 import { MerchantRequest } from '../types';
 
 interface AdminPortalProps {
+  merchants: MerchantRequest[];
+  setMerchants: (merchants: MerchantRequest[]) => void;
   onClose: () => void;
 }
 
-const AdminPortal: React.FC<AdminPortalProps> = ({ onClose }) => {
-  const [merchants, setMerchants] = useState<MerchantRequest[]>([
-    { id: '1', businessName: "Joe's Pizza Palace", status: 'active', bidAmount: 1.50, category: 'Food', appliedDate: '2024-03-10' },
-    { id: '2', businessName: 'QuickFix Plumbing', status: 'pending', bidAmount: 2.75, category: 'Services', appliedDate: '2024-03-12' },
-    { id: '3', businessName: 'TechHub Electronics', status: 'active', bidAmount: 1.20, category: 'Shopping', appliedDate: '2024-02-28' },
-    { id: '4', businessName: 'Urban Coffee Co.', status: 'active', bidAmount: 0.95, category: 'Food', appliedDate: '2024-03-15' },
-    { id: '5', businessName: 'Skyline Gym', status: 'pending', bidAmount: 3.10, category: 'Lifestyle', appliedDate: '2024-03-18' },
-  ]);
-
-  const [activeTab, setActiveTab] = useState<'merchants' | 'applications' | 'traffic'>('merchants');
+const AdminPortal: React.FC<AdminPortalProps> = ({ merchants = [], setMerchants, onClose }) => {
+  const [activeTab, setActiveTab] = useState<'merchants' | 'applications' | 'economics'>('merchants');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [newMerchant, setNewMerchant] = useState({ name: '', category: 'Food & Drink', bid: '1.50' });
+
+  const safeMerchants = Array.isArray(merchants) ? merchants : [];
 
   const filteredMerchants = useMemo(() => {
-    return merchants.filter(m => m.businessName.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [merchants, searchTerm]);
+    return safeMerchants.filter(m => 
+      (m.businessName || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [safeMerchants, searchTerm]);
 
-  const stats = {
-    revenue: 12482.50,
-    active: merchants.filter(m => m.status === 'active').length,
-    pending: merchants.filter(m => m.status === 'pending').length,
-    traffic: "1.2M"
-  };
+  const stats = useMemo(() => {
+    const activeMerchants = safeMerchants.filter(m => m.status === 'active');
+    const pendingMerchants = safeMerchants.filter(m => m.status === 'pending');
+    
+    return {
+      dailyRevenue: activeMerchants.reduce((acc, m) => acc + (Number(m.bidAmount) || 0), 0),
+      monthlySubscriptionRev: activeMerchants.length * 29.99,
+      active: activeMerchants.length,
+      pending: pendingMerchants.length,
+    };
+  }, [safeMerchants]);
 
   const approveMerchant = (id: string) => {
-    setMerchants(prev => prev.map(m => m.id === id ? { ...m, status: 'active' } : m));
+    setMerchants(safeMerchants.map(m => m.id === id ? { ...m, status: 'active', billingStatus: 'paid' } : m));
+  };
+
+  const deleteMerchant = (id: string) => {
+    if (confirm("Remove business from ecosystem?")) {
+      setMerchants(safeMerchants.filter(m => m.id !== id));
+    }
+  };
+
+  const handleAddMerchant = (e: React.FormEvent) => {
+    e.preventDefault();
+    const m: MerchantRequest = {
+      id: Date.now().toString(),
+      businessName: newMerchant.name,
+      status: 'pending',
+      bidAmount: parseFloat(newMerchant.bid) || 1.50,
+      category: newMerchant.category,
+      appliedDate: new Date().toISOString().split('T')[0]
+    };
+    setMerchants([...safeMerchants, m]);
+    setIsAdding(false);
+    setNewMerchant({ name: '', category: 'Food & Drink', bid: '1.50' });
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-7xl h-[90vh] rounded-[3.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border border-white/20 flex flex-col">
-        {/* Admin Header */}
+    <div className="fixed inset-0 z-[10000] bg-slate-900/95 backdrop-blur-2xl flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-7xl h-[92vh] rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 flex flex-col transform transition-all">
+        {/* Header */}
         <div className="bg-slate-900 p-8 flex justify-between items-center shrink-0">
           <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 bg-gradient-to-tr from-indigo-500 to-indigo-400 rounded-2xl flex items-center justify-center font-black text-white text-3xl shadow-2xl shadow-indigo-500/20">L</div>
+            <div className="w-14 h-14 bg-gradient-to-tr from-indigo-500 to-indigo-400 rounded-2xl flex items-center justify-center font-black text-white text-3xl shadow-lg">L</div>
             <div>
               <h2 className="text-white text-xl font-black brand-font tracking-tight">Lujora <span className="text-indigo-400">Hub</span></h2>
-              <div className="flex items-center mt-1 space-x-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <p className="text-slate-400 text-[10px] uppercase font-black tracking-[0.2em]">Platform Management Interface</p>
-              </div>
+              <p className="text-slate-400 text-[10px] uppercase font-black tracking-widest mt-1 flex items-center">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 animate-pulse"></span>
+                Ecosystem Economics Active
+              </p>
             </div>
           </div>
-          
-          <div className="flex bg-slate-800 p-1.5 rounded-2xl space-x-1">
-            {(['merchants', 'applications', 'traffic'] as const).map(tab => (
+          <div className="flex bg-slate-800 p-1.5 rounded-2xl space-x-1 border border-slate-700">
+            {(['merchants', 'applications', 'economics'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                  activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 {tab}
               </button>
             ))}
           </div>
-
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400 hover:text-white transition-all">✕</button>
+          <button 
+            onClick={onClose} 
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 text-slate-400 hover:text-white transition-all hover:bg-rose-600"
+          >
+            ✕
+          </button>
         </div>
 
-        <div className="flex-grow overflow-hidden flex flex-col p-8 lg:p-12 space-y-8">
-          {/* Quick Stats Banner */}
-          <div className="grid grid-cols-4 gap-6 shrink-0">
-            <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
-               <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest mb-1">Weekly Gross</p>
-               <h4 className="text-2xl font-black text-slate-800">${stats.revenue.toLocaleString()}</h4>
+        <div className="flex-grow overflow-hidden flex flex-col p-8 lg:p-12 space-y-8 bg-slate-50/30">
+          {/* Revenue Statistics Banner */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+               <p className="text-emerald-600 text-[10px] font-black uppercase tracking-widest mb-1">Daily Bid Volume</p>
+               <h4 className="text-3xl font-black text-slate-900">${stats.dailyRevenue.toFixed(2)}<span className="text-sm font-medium text-slate-400 ml-2">USD/day</span></h4>
             </div>
-            <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100">
-               <p className="text-indigo-400 text-[9px] font-black uppercase tracking-widest mb-1">Active Partners</p>
-               <h4 className="text-2xl font-black text-indigo-900">{stats.active}</h4>
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+               <p className="text-indigo-600 text-[10px] font-black uppercase tracking-widest mb-1">MRR (Verified Subscriptions)</p>
+               <h4 className="text-3xl font-black text-slate-900">${stats.monthlySubscriptionRev.toFixed(2)}<span className="text-sm font-medium text-slate-400 ml-2">USD/mo</span></h4>
             </div>
-            <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100">
-               <p className="text-amber-500 text-[9px] font-black uppercase tracking-widest mb-1">Pending Approval</p>
-               <h4 className="text-2xl font-black text-amber-900">{stats.pending}</h4>
-            </div>
-            <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
-               <p className="text-emerald-500 text-[9px] font-black uppercase tracking-widest mb-1">Global Traffic</p>
-               <h4 className="text-2xl font-black text-emerald-900">{stats.traffic}</h4>
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+               <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Verified Partners</p>
+               <h4 className="text-3xl font-black text-slate-900">{stats.active}</h4>
             </div>
           </div>
 
-          {/* Tab Content */}
-          <div className="flex-grow overflow-y-auto bg-white rounded-[2.5rem] border border-slate-100 shadow-sm relative">
+          <div className="flex-grow overflow-y-auto bg-white rounded-[2.5rem] border border-slate-200 shadow-sm relative custom-scrollbar">
              {activeTab === 'merchants' && (
                <div className="p-8">
-                  <div className="flex justify-between items-center mb-8">
-                    <h3 className="text-lg font-black text-slate-800">Merchant Directory</h3>
-                    <input 
-                      type="text" 
-                      placeholder="Filter by name..." 
-                      className="bg-slate-100 border-none rounded-2xl px-6 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <table className="w-full">
-                    <thead>
-                      <tr className="text-left text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                        <th className="pb-4 px-4">Business</th>
-                        <th className="pb-4 px-4">Sector</th>
-                        <th className="pb-4 px-4">Daily Bid</th>
-                        <th className="pb-4 px-4">Status</th>
-                        <th className="pb-4 px-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {filteredMerchants.map(m => (
-                        <tr key={m.id} className="text-sm hover:bg-slate-50 transition-colors">
-                          <td className="py-5 px-4 font-bold text-slate-800">{m.businessName}</td>
-                          <td className="py-5 px-4"><span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">{m.category}</span></td>
-                          <td className="py-5 px-4 font-mono font-black text-indigo-600">${m.bidAmount.toFixed(2)}</td>
-                          <td className="py-5 px-4">
-                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${m.status === 'active' ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'}`}>
-                              {m.status}
-                            </span>
-                          </td>
-                          <td className="py-5 px-4 text-right">
-                             <button className="text-indigo-600 font-bold text-xs hover:underline">Metrics</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-               </div>
-             )}
-
-             {activeTab === 'applications' && (
-               <div className="p-12 text-center h-full flex flex-col items-center justify-center">
-                 <div className="w-20 h-20 bg-amber-100 rounded-3xl flex items-center justify-center text-3xl mb-6">📩</div>
-                 <h3 className="text-2xl font-black text-slate-800 mb-2">Incoming Applications</h3>
-                 <p className="text-slate-500 text-sm max-w-sm mb-8">Review and verify businesses applying to the NEARBY marketplace.</p>
-                 <div className="w-full max-w-2xl bg-slate-50 rounded-3xl p-6 text-left border border-slate-100">
-                    <div className="flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm mb-3">
-                       <div>
-                         <p className="font-black text-slate-800 text-sm">Downtown Fresh Market</p>
-                         <p className="text-[10px] text-slate-400">Applied via Support Portal • Today</p>
-                       </div>
-                       <button onClick={() => alert('Merchant Verified!')} className="bg-emerald-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700">Verify & Go Live</button>
+                  <div className="flex justify-between items-center mb-8 px-2">
+                    <h3 className="text-xl font-black text-slate-800">Partner Visibility Management</h3>
+                    <div className="flex space-x-3">
+                       <input 
+                        type="text" 
+                        placeholder="Search partners..." 
+                        className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-2 text-xs font-medium w-64 focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
                     </div>
-                 </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                          <th className="pb-4 px-4">Business</th>
+                          <th className="pb-4 px-4">AI Bid ($)</th>
+                          <th className="pb-4 px-4">Visibility Weight</th>
+                          <th className="pb-4 px-4">Billing</th>
+                          <th className="pb-4 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {filteredMerchants.length > 0 ? filteredMerchants.map(m => (
+                          <tr key={m.id} className="text-sm hover:bg-slate-50 transition-colors group">
+                            <td className="py-5 px-4">
+                              <div className="font-bold text-slate-800">{m.businessName}</div>
+                              <div className="text-[10px] text-slate-400 uppercase font-black tracking-widest">{m.category}</div>
+                            </td>
+                            <td className="py-5 px-4 font-mono font-black text-indigo-600">
+                              ${(m.bidAmount || 0).toFixed(2)}
+                            </td>
+                            <td className="py-5 px-4">
+                               <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${Math.min(((Number(m.bidAmount) || 0) / 20) * 100, 100)}%` }}></div>
+                               </div>
+                            </td>
+                            <td className="py-5 px-4">
+                              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${m.billingStatus === 'paid' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
+                                {m.billingStatus || 'N/A'}
+                              </span>
+                            </td>
+                            <td className="py-5 px-4 text-right">
+                               <button onClick={() => deleteMerchant(m.id)} className="text-rose-500 hover:text-rose-700 font-black text-[10px] uppercase tracking-widest transition-colors opacity-0 group-hover:opacity-100">Suspend</button>
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan={5} className="py-24 text-center text-slate-400 italic font-medium">No verified partners matching search criteria.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                </div>
              )}
 
-             {activeTab === 'traffic' && (
-               <div className="p-8 h-full flex flex-col">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-black text-slate-800">Traffic Heatmap Simulation</h3>
-                    <span className="text-[10px] font-black text-indigo-600 animate-pulse">LIVE FEED ACTIVE</span>
-                  </div>
-                  <div className="flex-grow bg-slate-900 rounded-[2rem] p-8 flex items-center justify-center overflow-hidden relative">
-                     <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_50%_50%,_rgba(79,70,229,1)_0%,_rgba(0,0,0,1)_100%)]"></div>
-                     <div className="relative text-center">
-                        <div className="text-5xl mb-4">🌎</div>
-                        <p className="text-white text-xl font-black mb-2">Global Search Nodes</p>
-                        <p className="text-slate-500 text-sm">Visualizing real-time local search density...</p>
+             {activeTab === 'economics' && (
+               <div className="p-12">
+                  <div className="max-w-3xl mx-auto space-y-12">
+                     <div className="text-center">
+                        <h3 className="text-3xl font-black text-slate-800 mb-4">NEARBY Monetization Engine</h3>
+                        <p className="text-slate-500 leading-relaxed text-lg">The Lujora ecosystem is powered by two main revenue streams that ensure fair competition and data integrity.</p>
+                     </div>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="p-10 bg-slate-50 rounded-[2.5rem] border border-slate-200 hover:border-indigo-200 transition-all">
+                           <div className="text-4xl mb-6">📈</div>
+                           <h4 className="text-xl font-black text-slate-800 mb-2">Auctioned Visibility</h4>
+                           <p className="text-xs text-slate-500 leading-relaxed mb-6">Merchants bid for priority placement in AI search results. The model weighs [Bid Amount] vs [User Distance] to provide the most relevant, profitable result.</p>
+                           <div className="pt-6 border-t border-slate-200">
+                              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Global Avg. Bid: $1.84</p>
+                           </div>
+                        </div>
+                        <div className="p-10 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl">
+                           <div className="text-4xl mb-6">🛡️</div>
+                           <h4 className="text-xl font-black mb-2 text-white">Verification SaaS</h4>
+                           <p className="text-xs text-slate-400 leading-relaxed mb-6">A flat monthly subscription of $29.99 for the Verification Shield. This generates high-margin recurring revenue while establishing trust in the marketplace.</p>
+                           <div className="pt-6 border-t border-slate-800">
+                              <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Active Subs: {stats.active}</p>
+                           </div>
+                        </div>
                      </div>
                   </div>
                </div>
              )}
+
+             {activeTab === 'applications' && (
+                <div className="p-12 flex flex-col items-center justify-center min-h-[400px]">
+                   {stats.pending > 0 ? (
+                      <div className="w-full max-w-2xl space-y-4">
+                        <h3 className="text-xl font-black text-slate-800 mb-6 px-2">Incoming Applications</h3>
+                        {safeMerchants.filter(m => m.status === 'pending').map(m => (
+                          <div key={m.id} className="p-6 bg-slate-50 border border-slate-100 rounded-3xl flex justify-between items-center hover:bg-white hover:shadow-lg transition-all">
+                            <div>
+                               <p className="font-black text-slate-800 text-lg">{m.businessName}</p>
+                               <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Category: {m.category} • Proposed Bid: ${m.bidAmount}</p>
+                            </div>
+                            <button onClick={() => approveMerchant(m.id)} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all">Verify & Bill</button>
+                          </div>
+                        ))}
+                      </div>
+                   ) : (
+                     <div className="text-center bg-slate-50 p-16 rounded-[3rem] border border-dashed border-slate-200">
+                        <div className="text-6xl mb-6">🏜️</div>
+                        <h4 className="text-xl font-black text-slate-800">No Pending Requests</h4>
+                        <p className="text-slate-400 text-sm mt-2 max-w-xs mx-auto">All partnership applications have been processed and moved to the verified partner database.</p>
+                     </div>
+                   )}
+                </div>
+             )}
           </div>
         </div>
 
-        {/* Admin Footer */}
-        <div className="bg-slate-50 p-8 border-t border-slate-100 flex justify-between items-center shrink-0">
-           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-             © 2024 Lujora Technologies Platform Core
-           </div>
-           <button onClick={onClose} className="bg-slate-900 text-white px-10 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-rose-600 transition-all shadow-xl shadow-slate-200">
-             Terminate Session
-           </button>
+        <div className="p-8 bg-slate-900 border-t border-white/5 flex justify-between items-center shrink-0">
+           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">© 2024 Lujora Economics Core • Environment: Production</p>
+           <button onClick={onClose} className="bg-white text-slate-900 px-12 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all shadow-xl">Exit Secure Hub</button>
         </div>
       </div>
     </div>
