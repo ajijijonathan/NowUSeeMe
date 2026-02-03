@@ -12,6 +12,25 @@ export interface Review {
   text: string;
   author: string;
   createdAt: number;
+  placeTitle?: string;
+  placeUri?: string;
+}
+
+export interface Report {
+  id: string;
+  placeTitle: string;
+  placeUri: string;
+  reason: string;
+  timestamp: number;
+  status: 'pending' | 'resolved';
+}
+
+export interface PlatformInsights {
+  totalSearches: number;
+  totalStoreClicks: number;
+  categoryEngagement: Record<string, number>;
+  topSearchTerms: Record<string, number>;
+  dailyActivity: { date: string; searches: number; clicks: number }[];
 }
 
 export interface PlaceResult {
@@ -56,11 +75,11 @@ export interface MerchantRequest {
   id: string;
   businessName: string;
   status: 'pending' | 'active';
-  bidAmount: number; // Daily budget for AI visibility
+  bidAmount: number;
   category: string;
   appliedDate: string;
   billingStatus?: BillingStatus;
-  visibilityScore?: number; // Calculated weight for search ranking
+  visibilityScore?: number;
 }
 
 export const CATEGORIES: Category[] = [

@@ -12,15 +12,36 @@ interface AIAgentProps {
   userLocation: Location | null;
 }
 
+const CHAT_STORAGE_KEY = 'nearby_chat_history';
+
 const AIAgent: React.FC<AIAgentProps> = ({ userLocation }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: 'Hello! I am your NEARBY Concierge. I speak all languages fluently. How can I help you discover the local area today?' }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<any>(null);
+
+  // Initialize messages from localStorage
+  useEffect(() => {
+    const savedChat = localStorage.getItem(CHAT_STORAGE_KEY);
+    if (savedChat) {
+      try {
+        setMessages(JSON.parse(savedChat));
+      } catch (e) {
+        setMessages([{ role: 'model', text: 'Hello! I am your NEARBY AI Assistant. How can I help you today?' }]);
+      }
+    } else {
+      setMessages([{ role: 'model', text: 'Hello! I am your NEARBY Concierge. I speak all languages fluently. How can I help you discover the local area today?' }]);
+    }
+  }, []);
+
+  // Sync messages to localStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    }
+  }, [messages]);
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -35,7 +56,8 @@ const AIAgent: React.FC<AIAgentProps> = ({ userLocation }) => {
 
     const userMessage = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
+    const updatedMessages: Message[] = [...messages, { role: 'user', text: userMessage }];
+    setMessages(updatedMessages);
     setIsLoading(true);
 
     try {
@@ -68,6 +90,14 @@ const AIAgent: React.FC<AIAgentProps> = ({ userLocation }) => {
     }
   };
 
+  const clearChat = () => {
+    if (confirm("Clear all conversation history?")) {
+      const initialMessage: Message[] = [{ role: 'model', text: 'History cleared. How can I help you now?' }];
+      setMessages(initialMessage);
+      localStorage.removeItem(CHAT_STORAGE_KEY);
+    }
+  };
+
   return (
     <div className="fixed bottom-8 right-8 z-[200]">
       {/* Chat Window */}
@@ -82,7 +112,10 @@ const AIAgent: React.FC<AIAgentProps> = ({ userLocation }) => {
                 <p className="text-emerald-400 text-[9px] font-black uppercase tracking-widest">Multilingual Mode Active</p>
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors">✕</button>
+            <div className="flex items-center space-x-2">
+              <button onClick={clearChat} className="text-slate-500 hover:text-rose-400 transition-colors text-xs" title="Clear History">🗑️</button>
+              <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors">✕</button>
+            </div>
           </div>
 
           {/* Messages Area */}

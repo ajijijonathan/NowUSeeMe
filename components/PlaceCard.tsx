@@ -1,19 +1,30 @@
 
 import React, { useState, useEffect } from 'react';
-import { PlaceResult, PlaceType, Review } from '../types';
+import { PlaceResult, PlaceType, Review, Report } from '../types';
 
 interface PlaceCardProps {
   place: PlaceResult;
   onView?: (place: PlaceResult) => void;
   compact?: boolean;
+  isFavorite?: boolean;
+  onToggleFavorite?: (place: PlaceResult) => void;
 }
 
-const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false }) => {
+const PlaceCard: React.FC<PlaceCardProps> = ({ 
+  place, 
+  onView, 
+  compact = false, 
+  isFavorite = false,
+  onToggleFavorite 
+}) => {
   const [showReviews, setShowReviews] = useState(false);
+  const [isReporting, setIsReporting] = useState(false);
+  const [reportReason, setReportReason] = useState('');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [newReviewText, setNewReviewText] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(false);
 
   // Load reviews from localStorage on mount or when place URI changes
   useEffect(() => {
@@ -40,7 +51,9 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
       author: 'You',
       text: newReviewText,
       rating: newReviewRating,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      placeTitle: place.title,
+      placeUri: place.uri
     };
 
     const updatedReviews = [newReview, ...reviews];
@@ -57,13 +70,31 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
     }, 400);
   };
 
-  const handleReport = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const confirmed = window.confirm(`Report "${place.title}" for review? This flags the business for our administrative team to verify its data integrity.`);
-    if (confirmed) {
-      console.log(`[NEARBY REPORT] Business: ${place.title}, URI: ${place.uri}, Timestamp: ${new Date().toISOString()}`);
-      alert("Report submitted successfully. Thank you for maintaining ecosystem integrity.");
-    }
+  const submitReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportReason.trim()) return;
+
+    const reportsKey = 'nearby_reports';
+    const existingReports: Report[] = JSON.parse(localStorage.getItem(reportsKey) || '[]');
+    
+    const newReport: Report = {
+      id: Date.now().toString(),
+      placeTitle: place.title,
+      placeUri: place.uri,
+      reason: reportReason,
+      timestamp: Date.now(),
+      status: 'pending'
+    };
+    
+    localStorage.setItem(reportsKey, JSON.stringify([newReport, ...existingReports]));
+    
+    setReportSuccess(true);
+    setReportReason('');
+    
+    setTimeout(() => {
+      setIsReporting(false);
+      setReportSuccess(false);
+    }, 2000);
   };
 
   const getTypeStyle = (type?: PlaceType) => {
@@ -77,6 +108,11 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
 
   const handleClick = () => {
     if (onView) onView(place);
+  };
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onToggleFavorite) onToggleFavorite(place);
   };
 
   const shareLinks = {
@@ -107,21 +143,20 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
         </div>
         <div className="flex space-x-1 shrink-0">
            <button 
+            onClick={handleFavoriteClick}
+            className={`w-6 h-6 flex items-center justify-center rounded-md transition-all text-[10px] ${
+              isFavorite ? 'bg-rose-50 text-rose-500' : 'bg-slate-50 text-slate-300 hover:text-rose-400'
+            }`}
+          >
+            {isFavorite ? '❤️' : '🤍'}
+          </button>
+           <button 
             onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
             className="w-6 h-6 flex items-center justify-center rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-[10px]"
             title="Share on WhatsApp"
           >
             💬
           </button>
-          <a 
-            href={place.uri} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="w-6 h-6 flex items-center justify-center rounded-md bg-slate-50 text-slate-400 hover:bg-indigo-600 hover:text-white transition-all text-[10px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            ↗
-          </a>
         </div>
       </div>
     );
@@ -133,8 +168,20 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
         ? 'bg-gradient-to-br from-white to-indigo-50/50 border-indigo-200' 
         : 'bg-white border-slate-100'
     }`}>
+      {/* Floating Favorite Button */}
+      <button 
+        onClick={handleFavoriteClick}
+        className={`absolute top-6 right-6 w-10 h-10 rounded-full flex items-center justify-center transition-all z-10 active:scale-75 shadow-sm border ${
+          isFavorite 
+            ? 'bg-rose-50 border-rose-100 text-rose-500 scale-110' 
+            : 'bg-white border-slate-100 text-slate-200 hover:text-rose-400 hover:scale-105'
+        }`}
+      >
+        <span className="text-xl leading-none">{isFavorite ? '❤️' : '🤍'}</span>
+      </button>
+
       {/* Badges */}
-      <div className="flex justify-between items-start mb-4">
+      <div className="flex justify-between items-start mb-4 pr-10">
         <div className="flex flex-wrap gap-2">
           <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border ${getTypeStyle(place.type)}`}>
             {place.type || 'Market'}
@@ -173,6 +220,45 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
           </span>
         </div>
       </div>
+
+      {/* Report Form Section */}
+      {isReporting && (
+        <div className="mt-6 bg-rose-50 border border-rose-100 rounded-[1.5rem] p-4 animate-in slide-in-from-top duration-300">
+          {reportSuccess ? (
+            <div className="text-center py-4">
+              <span className="text-2xl mb-2 block">✅</span>
+              <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">Report Transmitted to Hub</p>
+            </div>
+          ) : (
+            <form onSubmit={submitReport}>
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-3">Report Business</h4>
+              <textarea
+                autoFocus
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                placeholder="Why are you reporting this? (e.g. Inaccurate data, offensive, closed...)"
+                className="w-full bg-white border-none rounded-xl p-3 text-xs text-slate-800 placeholder:text-slate-300 focus:ring-1 focus:ring-rose-200 resize-none min-h-[80px] mb-3"
+              />
+              <div className="flex space-x-2">
+                <button 
+                  type="button" 
+                  onClick={() => setIsReporting(false)}
+                  className="flex-1 py-2 bg-white text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={!reportReason.trim()}
+                  className="flex-1 py-2 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all disabled:opacity-50"
+                >
+                  Send Report
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* Reviews Toggle Section */}
       <div className="mt-6 border-t border-slate-100 pt-4">
@@ -246,57 +332,59 @@ const PlaceCard: React.FC<PlaceCardProps> = ({ place, onView, compact = false })
       </div>
       
       {/* Action Row */}
-      <div className="mt-6 flex flex-col space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-             <button 
-              onClick={(e) => handleSocialClick(e, shareLinks.facebook)}
-              className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs"
-              title="Share on Facebook"
-            >
-              f
-            </button>
+      {!isReporting && (
+        <div className="mt-6 flex flex-col space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+               <button 
+                onClick={(e) => handleSocialClick(e, shareLinks.facebook)}
+                className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs"
+                title="Share on Facebook"
+              >
+                f
+              </button>
+              <button 
+                onClick={(e) => handleSocialClick(e, shareLinks.twitter)}
+                className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-indigo-600 transition-all text-[10px]"
+                title="Share on X (Twitter)"
+              >
+                𝕏
+              </button>
+              <button 
+                onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
+                className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-sm"
+                title="Share on WhatsApp"
+              >
+                💬
+              </button>
+            </div>
+
             <button 
-              onClick={(e) => handleSocialClick(e, shareLinks.twitter)}
-              className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-indigo-600 transition-all text-[10px]"
-              title="Share on X (Twitter)"
+              onClick={(e) => { e.stopPropagation(); setIsReporting(true); }}
+              className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-rose-500 transition-colors flex items-center"
+              title="Report this place"
             >
-              𝕏
-            </button>
-            <button 
-              onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
-              className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-sm"
-              title="Share on WhatsApp"
-            >
-              💬
+              <span className="mr-1">🚩</span> Report
             </button>
           </div>
 
-          <button 
-            onClick={handleReport}
-            className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-rose-500 transition-colors flex items-center"
-            title="Report this place"
-          >
-            <span className="mr-1">🚩</span> Report
-          </button>
+          <div className="flex space-x-3">
+            <a 
+              href={place.uri} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              onClick={handleClick}
+              className={`flex-grow inline-flex items-center justify-center py-3 font-black uppercase tracking-widest rounded-2xl transition-all text-[11px] ${
+                place.isPromoted 
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:scale-105 shadow-xl shadow-indigo-200' 
+                  : 'bg-slate-900 text-white hover:bg-indigo-600'
+              }`}
+            >
+              View Store
+            </a>
+          </div>
         </div>
-
-        <div className="flex space-x-3">
-          <a 
-            href={place.uri} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            onClick={handleClick}
-            className={`flex-grow inline-flex items-center justify-center py-3 font-black uppercase tracking-widest rounded-2xl transition-all text-[11px] ${
-              place.isPromoted 
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:scale-105 shadow-xl shadow-indigo-200' 
-                : 'bg-slate-900 text-white hover:bg-indigo-600'
-            }`}
-          >
-            View Store
-          </a>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

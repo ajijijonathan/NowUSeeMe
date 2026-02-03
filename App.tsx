@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { searchLocalContent, fetchWeatherForLocation } from './services/geminiService';
-import { Location, SearchResponse, CATEGORIES, Category, WeatherData, PlaceResult, RecentPlace, SEARCH_SUGGESTIONS, MerchantRequest, InfoType } from './types';
+import { Location, SearchResponse, CATEGORIES, Category, WeatherData, PlaceResult, RecentPlace, SEARCH_SUGGESTIONS, MerchantRequest, InfoType, PlatformInsights } from './types';
 import PlaceCard from './components/PlaceCard';
 import AdminPortal from './components/AdminPortal';
 import MapView from './components/MapView';
@@ -10,7 +10,17 @@ import AIAgent from './components/AIAgent';
 
 const RECENT_STORAGE_KEY = 'nearby_recent_views';
 const MERCHANTS_STORAGE_KEY = 'nearby_merchants';
+const INSIGHTS_STORAGE_KEY = 'nearby_platform_insights';
+const FAVORITES_STORAGE_KEY = 'nearby_favorites';
 const ADMIN_PASSKEY = 'lujora2025';
+
+const DEFAULT_INSIGHTS: PlatformInsights = {
+  totalSearches: 0,
+  totalStoreClicks: 0,
+  categoryEngagement: {},
+  topSearchTerms: {},
+  dailyActivity: []
+};
 
 const DEFAULT_MERCHANTS: MerchantRequest[] = [
   { id: '1', businessName: "Fresh Organics", status: 'active', bidAmount: 8.50, category: 'Food & Drink', appliedDate: '2024-03-10', billingStatus: 'paid' },
@@ -26,35 +36,37 @@ const App: React.FC = () => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
   
-  // Admin & Stealth States
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isPasskeyPromptOpen, setIsPasskeyPromptOpen] = useState(false);
   const [passkeyInput, setPasskeyInput] = useState('');
   const [passkeyError, setPasskeyError] = useState(false);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   
-  // Stealth Pattern State
   const [logoClicks, setLogoClicks] = useState(0);
-  // Fix: Using 'any' for clickTimerRef to avoid 'NodeJS' namespace error in browser environment
   const clickTimerRef = useRef<any>(null);
 
   const [viewMode, setViewMode] = useState('grid');
   const [activeInfo, setActiveInfo] = useState<InfoType | null>(null);
   const [recentPlaces, setRecentPlaces] = useState<RecentPlace[]>([]);
   const [merchants, setMerchants] = useState<MerchantRequest[]>([]);
+  const [favorites, setFavorites] = useState<PlaceResult[]>([]);
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
 
   useEffect(() => {
-    // 1. Check URL for stealth mode
     const params = new URLSearchParams(window.location.search);
     if (params.get('mode') === 'admin') {
       setIsPasskeyPromptOpen(true);
-      // Clean URL after detection
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     const storedRecent = localStorage.getItem(RECENT_STORAGE_KEY);
     if (storedRecent) {
       try { setRecentPlaces(JSON.parse(storedRecent)); } catch (e) { console.error(e); }
+    }
+
+    const storedFavorites = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (storedFavorites) {
+      try { setFavorites(JSON.parse(storedFavorites)); } catch (e) { console.error(e); }
     }
 
     const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
@@ -71,20 +83,45 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Handle Secret Logo Knocks
+  const trackInsight = useCallback((type: 'search' | 'click', value?: string) => {
+    const insightsStr = localStorage.getItem(INSIGHTS_STORAGE_KEY);
+    let insights: PlatformInsights = insightsStr ? JSON.parse(insightsStr) : { ...DEFAULT_INSIGHTS };
+    
+    const today = new Date().toISOString().split('T')[0];
+    let dailyEntry = insights.dailyActivity.find(d => d.date === today);
+    if (!dailyEntry) {
+      dailyEntry = { date: today, searches: 0, clicks: 0 };
+      insights.dailyActivity.push(dailyEntry);
+    }
+
+    if (type === 'search') {
+      insights.totalSearches += 1;
+      dailyEntry.searches += 1;
+      if (value) {
+        const key = value.toLowerCase().trim();
+        insights.topSearchTerms[key] = (insights.topSearchTerms[key] || 0) + 1;
+      }
+    } else if (type === 'click') {
+      insights.totalStoreClicks += 1;
+      dailyEntry.clicks += 1;
+      if (value) {
+        insights.categoryEngagement[value] = (insights.categoryEngagement[value] || 0) + 1;
+      }
+    }
+
+    insights.dailyActivity = insights.dailyActivity.slice(-30);
+    localStorage.setItem(INSIGHTS_STORAGE_KEY, JSON.stringify(insights));
+  }, []);
+
   const handleLogoClick = () => {
     const newCount = logoClicks + 1;
     setLogoClicks(newCount);
-
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-
     if (newCount >= 5) {
       setIsPasskeyPromptOpen(true);
       setLogoClicks(0);
     } else {
-      clickTimerRef.current = setTimeout(() => {
-        setLogoClicks(0);
-      }, 3000); // Reset clicks after 3 seconds of inactivity
+      clickTimerRef.current = setTimeout(() => { setLogoClicks(0); }, 3000);
     }
   };
 
@@ -114,6 +151,7 @@ const App: React.FC = () => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setQuery(searchQuery);
+    trackInsight('search', searchQuery);
     
     const res = await searchLocalContent(searchQuery, location);
     
@@ -136,11 +174,29 @@ const App: React.FC = () => {
     res.places = [...localPlaces, ...res.places];
     setResult(res);
     setLoading(false);
-  }, [location, merchants]);
+  }, [location, merchants, trackInsight]);
 
-  const onCategoryClick = (category: Category) => handleSearch(`Find the best ${category.label} shops and services`);
+  const onCategoryClick = (category: Category) => {
+    handleSearch(`Find the best ${category.label} shops and services`);
+    trackInsight('click', category.id);
+  };
+
+  const toggleFavorite = (place: PlaceResult) => {
+    setFavorites(prev => {
+      const isAlreadyFav = prev.find(p => p.uri === place.uri);
+      let updated;
+      if (isAlreadyFav) {
+        updated = prev.filter(p => p.uri !== place.uri);
+      } else {
+        updated = [place, ...prev];
+      }
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const handleViewPlace = (place: PlaceResult) => {
+    trackInsight('click', place.type || 'unknown');
     const newRecent: RecentPlace = { ...place, viewedAt: Date.now() };
     setRecentPlaces(prev => {
       const filtered = prev.filter(p => p.uri !== place.uri);
@@ -153,7 +209,6 @@ const App: React.FC = () => {
   const handlePasskeySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsAuthorizing(true);
-    
     setTimeout(() => {
       if (passkeyInput.trim() === ADMIN_PASSKEY) {
         setPasskeyError(false);
@@ -181,7 +236,7 @@ const App: React.FC = () => {
             </button>
             <h1 className="brand-font text-2xl font-black text-slate-800 tracking-tighter">NEAR<span className="text-indigo-600">BY</span></h1>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
             {locationStatus === 'granted' && weather && (
               <div className="hidden lg:flex items-center space-x-3 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm">
                 <span className="text-2xl">{weather.emoji}</span>
@@ -191,12 +246,76 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
+            
+            <button 
+              onClick={() => setIsFavoritesOpen(true)}
+              className="relative w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-rose-500 hover:bg-rose-50 shadow-sm transition-all"
+            >
+              ❤️
+              {favorites.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white animate-bounce">
+                  {favorites.length}
+                </span>
+              )}
+            </button>
+
             <button onClick={refreshLocation} className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 shadow-sm transition-all">
               {locationStatus === 'requesting' ? '⌛' : '🛰️'}
             </button>
           </div>
         </div>
       </header>
+
+      {/* Favorites Sidebar Drawer */}
+      {isFavoritesOpen && (
+        <div className="fixed inset-0 z-[1000] flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsFavoritesOpen(false)}></div>
+          <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black brand-font tracking-tight">Your Favorites</h3>
+                <p className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mt-1">Saved Collections</p>
+              </div>
+              <button onClick={() => setIsFavoritesOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all font-bold">✕</button>
+            </div>
+            
+            <div className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar">
+              {favorites.length > 0 ? (
+                favorites.map((fav) => (
+                  <PlaceCard 
+                    key={fav.uri} 
+                    place={fav} 
+                    compact 
+                    isFavorite={true}
+                    onToggleFavorite={toggleFavorite}
+                    onView={(p) => {
+                      setIsFavoritesOpen(false);
+                      handleViewPlace(p);
+                    }}
+                  />
+                ))
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12 space-y-6">
+                  <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-5xl">❤️</div>
+                  <div>
+                    <h4 className="font-black text-slate-800 mb-2">No favorites saved</h4>
+                    <p className="text-slate-400 text-xs font-medium">Click the heart icon on any business card to save it for later.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-8 bg-slate-50 border-t border-slate-100">
+               <button 
+                onClick={() => setIsFavoritesOpen(false)}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all"
+               >
+                 Keep Exploring
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="flex-grow">
         <div className="max-w-5xl mx-auto px-6 pt-16 pb-12">
@@ -259,9 +378,21 @@ const App: React.FC = () => {
                      </div>
                    </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {result.places.map((place, idx) => <PlaceCard key={idx} place={place} onView={handleViewPlace} />)}
-                </div>
+                {viewMode === 'grid' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {result.places.map((place, idx) => (
+                      <PlaceCard 
+                        key={idx} 
+                        place={place} 
+                        onView={handleViewPlace} 
+                        isFavorite={!!favorites.find(f => f.uri === place.uri)}
+                        onToggleFavorite={toggleFavorite}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <MapView places={result.places} userLocation={location} weather={weather} />
+                )}
               </div>
             )}
           </div>
@@ -289,13 +420,12 @@ const App: React.FC = () => {
              <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em]">Lujora Core</h4>
              <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
                 <p className="text-slate-800 font-black text-sm mb-1">Lujora Technologies</p>
-                <p className="text-slate-400 text-xs font-medium">Global AI Infrastructure</p>
+                <p className="text-slate-400 text-xs font-medium">Global AI Solutions</p>
              </div>
           </div>
         </div>
       </footer>
 
-      {/* Global Overlays */}
       {isPasskeyPromptOpen && (
         <div className="fixed inset-0 z-[10001] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-4 overflow-hidden">
           <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-100 transform transition-all">
