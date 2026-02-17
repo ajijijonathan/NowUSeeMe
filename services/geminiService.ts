@@ -1,21 +1,20 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Location, SearchResponse, PlaceResult, WeatherData, PlaceType } from "../types";
+import { Location, SearchResponse, PlaceResult, WeatherData, PlaceType, LanguageCode } from "../types";
 
-// Fix: Strictly following the initialization guidelines by using process.env.API_KEY directly
 const getAIClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-export const fetchWeatherForLocation = async (location: Location): Promise<WeatherData | null> => {
+export const fetchWeatherForLocation = async (location: Location, language: LanguageCode = 'en'): Promise<WeatherData | null> => {
   try {
     const ai = getAIClient();
-    // Fix: Using gemini-3-flash-preview for basic text Q&A tasks as per guidelines
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `What is the current weather at coordinates (${location.latitude}, ${location.longitude})? 
       Return only a JSON object with these keys: "temp" (string, e.g. "22°C"), "condition" (string, e.g. "Sunny"), "emoji" (string, e.g. "☀️"), "locationName" (string, e.g. "San Francisco"). 
       Identify the location accurately based on the coordinates.
+      CRITICAL: Return the "condition" and "locationName" strictly in the following language/dialect: ${language}.
       Do not include any text outside the JSON.`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -41,11 +40,11 @@ export const fetchWeatherForLocation = async (location: Location): Promise<Weath
 
 export const searchLocalContent = async (
   query: string,
-  location: Location | null
+  location: Location | null,
+  language: LanguageCode = 'en'
 ): Promise<SearchResponse> => {
   try {
     const ai = getAIClient();
-    // Fix: Maps grounding is only supported in Gemini 2.5 series models
     const modelName = 'gemini-2.5-flash';
     
     const config: any = {
@@ -65,7 +64,11 @@ export const searchLocalContent = async (
 
     const prompt = `Find "${query}" near ${location ? `the user at (${location.latitude}, ${location.longitude})` : 'me'}. 
     This is a global search. Classify each result as either a 'market', 'service', 'emergency', or 'lifestyle'.
-    Provide a professional summary of the local scene in this specific area.
+    
+    CRITICAL LANGUAGE REQUIREMENT: 
+    Respond strictly in the following language or dialect: ${language}. 
+    Provide a professional but culturally appropriate summary of the local scene in this specific area using that language.
+    
     Then, for the places found, provide their metadata in a structured way.
     FORMAT AT THE END: JSON_META: [{"title": "Name", "lat": 0.0, "lng": 0.0, "type": "market/service/emergency/lifestyle"}]`;
 

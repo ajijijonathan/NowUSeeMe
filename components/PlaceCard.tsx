@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { PlaceResult, PlaceType, Review, Report } from '../types';
+import { PlaceResult, PlaceType, Review, Report, LanguageCode, TRANSLATIONS } from '../types';
 
 interface PlaceCardProps {
   place: PlaceResult;
@@ -8,6 +8,7 @@ interface PlaceCardProps {
   compact?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: (place: PlaceResult) => void;
+  language?: LanguageCode;
 }
 
 const PlaceCard: React.FC<PlaceCardProps> = ({ 
@@ -15,18 +16,12 @@ const PlaceCard: React.FC<PlaceCardProps> = ({
   onView, 
   compact = false, 
   isFavorite = false,
-  onToggleFavorite 
+  onToggleFavorite,
+  language = 'en'
 }) => {
-  const [showReviews, setShowReviews] = useState(false);
-  const [isReporting, setIsReporting] = useState(false);
-  const [reportReason, setReportReason] = useState('');
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [newReviewText, setNewReviewText] = useState('');
-  const [newReviewRating, setNewReviewRating] = useState(5);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [reportSuccess, setReportSuccess] = useState(false);
+  const t = (key: string) => TRANSLATIONS[language][key] || key;
 
-  // Load reviews from localStorage on mount or when place URI changes
   useEffect(() => {
     if (compact) return;
     const storageKey = `nearby_reviews_${btoa(place.uri)}`;
@@ -40,74 +35,22 @@ const PlaceCard: React.FC<PlaceCardProps> = ({
     }
   }, [place.uri, compact]);
 
-  const handleAddReview = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newReviewText.trim()) return;
-
-    setIsSubmitting(true);
-    
-    const newReview: Review = {
-      id: Date.now().toString(),
-      author: 'You',
-      text: newReviewText,
-      rating: newReviewRating,
-      createdAt: Date.now(),
-      placeTitle: place.title,
-      placeUri: place.uri
-    };
-
-    const updatedReviews = [newReview, ...reviews];
-    setReviews(updatedReviews);
-    
-    const storageKey = `nearby_reviews_${btoa(place.uri)}`;
-    localStorage.setItem(storageKey, JSON.stringify(updatedReviews));
-    
-    setNewReviewText('');
-    setNewReviewRating(5);
-    
-    setTimeout(() => {
-      setIsSubmitting(false);
-    }, 400);
-  };
-
-  const submitReport = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reportReason.trim()) return;
-
-    const reportsKey = 'nearby_reports';
-    const existingReports: Report[] = JSON.parse(localStorage.getItem(reportsKey) || '[]');
-    
-    const newReport: Report = {
-      id: Date.now().toString(),
-      placeTitle: place.title,
-      placeUri: place.uri,
-      reason: reportReason,
-      timestamp: Date.now(),
-      status: 'pending'
-    };
-    
-    localStorage.setItem(reportsKey, JSON.stringify([newReport, ...existingReports]));
-    
-    setReportSuccess(true);
-    setReportReason('');
-    
-    setTimeout(() => {
-      setIsReporting(false);
-      setReportSuccess(false);
-    }, 2000);
-  };
-
-  const getTypeStyle = (type?: PlaceType) => {
+  const getTypeColor = (type?: PlaceType) => {
     switch (type) {
-      case 'emergency': return 'bg-rose-100 text-rose-600 border-rose-200';
-      case 'service': return 'bg-amber-100 text-amber-700 border-amber-200';
-      case 'market': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      default: return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+      case 'emergency': return 'rose';
+      case 'service': return 'amber';
+      case 'market': return 'emerald';
+      default: return 'indigo';
     }
   };
 
-  const handleClick = () => {
-    if (onView) onView(place);
+  const color = getTypeColor(place.type);
+  
+  const typeStyles: Record<string, string> = {
+    rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 group-hover:border-rose-500/40 shadow-rose-500/10',
+    amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 group-hover:border-amber-500/40 shadow-amber-500/10',
+    emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 group-hover:border-emerald-500/40 shadow-emerald-500/10',
+    indigo: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 group-hover:border-indigo-500/40 shadow-indigo-500/10',
   };
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
@@ -115,276 +58,110 @@ const PlaceCard: React.FC<PlaceCardProps> = ({
     if (onToggleFavorite) onToggleFavorite(place);
   };
 
-  const shareLinks = {
-    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(place.uri)}`,
-    twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(place.uri)}&text=${encodeURIComponent(`Check out ${place.title} on NEARBY!`)}`,
-    whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(`Check out ${place.title} on NEARBY! ${place.uri}`)}`
-  };
-
-  const handleSocialClick = (e: React.MouseEvent, url: string) => {
-    e.stopPropagation();
-    window.open(url, '_blank', 'width=600,height=400');
-  };
-
   if (compact) {
     return (
       <div 
-        onClick={handleClick}
-        className="flex items-center space-x-3 bg-white border border-slate-100 p-2.5 rounded-2xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer group"
+        onClick={() => onView?.(place)}
+        className="flex items-center space-x-4 glass-panel p-4 rounded-3xl hover:translate-x-2 transition-all cursor-pointer group border-transparent hover:border-indigo-500/40 shadow-lg"
       >
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${getTypeStyle(place.type)}`}>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-inner ${typeStyles[color]}`}>
           {place.type === 'market' ? '🛍️' : place.type === 'service' ? '🛠️' : '📍'}
         </div>
         <div className="flex-grow min-w-0">
-          <h4 className="font-bold text-slate-800 text-xs truncate group-hover:text-indigo-600 transition-colors">{place.title}</h4>
-          <div className="flex items-center space-x-2">
-            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">{place.distance || 'Near you'}</p>
-          </div>
+          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{place.title}</h4>
+          <p className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{place.distance || 'NEAR_NODE'}</p>
         </div>
-        <div className="flex space-x-1 shrink-0">
-           <button 
-            onClick={handleFavoriteClick}
-            className={`w-6 h-6 flex items-center justify-center rounded-md transition-all text-[10px] ${
-              isFavorite ? 'bg-rose-50 text-rose-500' : 'bg-slate-50 text-slate-300 hover:text-rose-400'
-            }`}
-          >
-            {isFavorite ? '❤️' : '🤍'}
-          </button>
-           <button 
-            onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
-            className="w-6 h-6 flex items-center justify-center rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-[10px]"
-            title="Share on WhatsApp"
-          >
-            💬
-          </button>
-        </div>
+        <button 
+          onClick={handleFavoriteClick}
+          className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${isFavorite ? 'text-rose-500 bg-rose-500/10' : 'text-slate-300 dark:text-slate-600 hover:text-rose-400'}`}
+          aria-label="Toggle Favorite"
+        >
+          {isFavorite ? '❤️' : '🤍'}
+        </button>
       </div>
     );
   }
 
   return (
-    <div className={`relative rounded-[2rem] shadow-sm border p-6 hover:shadow-xl transition-all duration-500 flex flex-col group ${
+    <div className={`group relative rounded-[3rem] p-10 transition-all duration-700 flex flex-col h-full hover:-translate-y-4 border shadow-2xl overflow-hidden ${
       place.isPromoted 
-        ? 'bg-gradient-to-br from-white to-indigo-50/50 border-indigo-200' 
-        : 'bg-white border-slate-100'
+        ? 'animated-border border-transparent' 
+        : 'glass-panel border-black/5 dark:border-slate-700/30'
     }`}>
-      {/* Floating Favorite Button */}
-      <button 
-        onClick={handleFavoriteClick}
-        className={`absolute top-6 right-6 w-10 h-10 rounded-full flex items-center justify-center transition-all z-10 active:scale-75 shadow-sm border ${
-          isFavorite 
-            ? 'bg-rose-50 border-rose-100 text-rose-500 scale-110' 
-            : 'bg-white border-slate-100 text-slate-200 hover:text-rose-400 hover:scale-105'
-        }`}
-      >
-        <span className="text-xl leading-none">{isFavorite ? '❤️' : '🤍'}</span>
-      </button>
-
-      {/* Badges */}
-      <div className="flex justify-between items-start mb-4 pr-10">
-        <div className="flex flex-wrap gap-2">
-          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border ${getTypeStyle(place.type)}`}>
-            {place.type || 'Market'}
+      {/* Dynamic Aura Glow */}
+      <div className={`absolute top-0 right-0 w-48 h-48 blur-[100px] rounded-full -mr-24 -mt-24 transition-all duration-700 group-hover:scale-150 ${
+        color === 'rose' ? 'bg-rose-500/10' : color === 'amber' ? 'bg-amber-500/10' : color === 'emerald' ? 'bg-emerald-500/10' : 'bg-indigo-500/10'
+      }`}></div>
+      
+      <div className="flex justify-between items-start mb-10 z-10">
+        <div className="flex flex-wrap gap-3">
+          <span className={`px-5 py-2 rounded-2xl text-[10px] font-mono font-black uppercase tracking-[0.2em] border ${typeStyles[color]}`}>
+            {place.type || 'SYSTEM_NODE'}
           </span>
           {place.isVerified && (
-            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] bg-blue-50 text-blue-600 border border-blue-100 flex items-center">
-              <span className="mr-1">🛡️</span> Verified
+            <span className="px-5 py-2 rounded-2xl text-[10px] font-mono font-black uppercase tracking-[0.2em] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center shadow-blue-500/10 shadow-lg">
+              <span className="mr-2">🛡️</span> VERIFIED
             </span>
           )}
         </div>
-        {place.isPromoted && (
-          <div className="bg-indigo-600 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest flex items-center shadow-lg shadow-indigo-100">
-            Featured
-          </div>
-        )}
+        <button 
+          onClick={handleFavoriteClick}
+          aria-label={isFavorite ? `Remove from favorites` : `Add to favorites`}
+          className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all glass-panel group/fav ${
+            isFavorite ? 'text-rose-500 border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.3)]' : 'text-slate-300 dark:text-slate-600 hover:text-rose-400 hover:border-rose-500/20'
+          }`}
+        >
+          <span className={`text-2xl transition-transform duration-500 group-hover/fav:scale-125 ${isFavorite ? 'scale-110' : ''}`}>
+            {isFavorite ? '❤️' : '🤍'}
+          </span>
+        </button>
       </div>
       
-      <div className="flex-grow">
-        <h3 className={`font-black text-xl mb-1 leading-tight transition-colors ${
-          place.isPromoted ? 'text-indigo-900 group-hover:text-indigo-600' : 'text-slate-800 group-hover:text-indigo-600'
-        }`}>
+      <div className="flex-grow z-10">
+        <h3 className="font-display font-black text-3xl mb-3 leading-tight tracking-tighter text-slate-900 dark:text-slate-50 group-hover:text-indigo-600 dark:group-hover:text-transparent dark:group-hover:bg-clip-text dark:group-hover:bg-gradient-to-r dark:group-hover:from-white dark:group-hover:to-slate-400 transition-all duration-500">
           {place.title}
         </h3>
-        <div className="flex items-center space-x-3 mt-2">
+        <div className="flex items-center space-x-5 mt-6">
           {place.distance && (
-             <span className="text-[10px] font-bold text-slate-400 flex items-center">
-               <span className="mr-1 opacity-50">📍</span> {place.distance}
+             <span className="text-[12px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center">
+               <span className="w-2 h-2 rounded-full bg-emerald-500 mr-3 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+               {place.distance}
              </span>
           )}
-          <span className="text-[10px] font-bold text-emerald-500 flex items-center">
-            <span className="relative flex h-2 w-2 mr-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            Open Now
+          <span className="text-[12px] font-mono font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest">
+            {reviews.length} REVIEWS
           </span>
         </div>
       </div>
 
-      {/* Report Form Section */}
-      {isReporting && (
-        <div className="mt-6 bg-rose-50 border border-rose-100 rounded-[1.5rem] p-4 animate-in slide-in-from-top duration-300">
-          {reportSuccess ? (
-            <div className="text-center py-4">
-              <span className="text-2xl mb-2 block">✅</span>
-              <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">Report Transmitted to Hub</p>
-            </div>
-          ) : (
-            <form onSubmit={submitReport}>
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-3">Report Business</h4>
-              <textarea
-                autoFocus
-                value={reportReason}
-                onChange={(e) => setReportReason(e.target.value)}
-                placeholder="Why are you reporting this? (e.g. Inaccurate data, offensive, closed...)"
-                className="w-full bg-white border-none rounded-xl p-3 text-xs text-slate-800 placeholder:text-slate-300 focus:ring-1 focus:ring-rose-200 resize-none min-h-[80px] mb-3"
-              />
-              <div className="flex space-x-2">
-                <button 
-                  type="button" 
-                  onClick={() => setIsReporting(false)}
-                  className="flex-1 py-2 bg-white text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-50 transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={!reportReason.trim()}
-                  className="flex-1 py-2 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all disabled:opacity-50"
-                >
-                  Send Report
-                </button>
-              </div>
-            </form>
-          )}
+      <div className="mt-12 flex flex-col space-y-5 z-10">
+        <div className="flex items-center justify-between">
+          <button 
+            onClick={(e) => { e.stopPropagation(); window.open(`https://api.whatsapp.com/send?text=Check out ${place.title}! ${place.uri}`, '_blank'); }} 
+            className="w-12 h-12 flex items-center justify-center rounded-2xl glass-panel text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-500 transition-all shadow-lg"
+            aria-label="Share on WhatsApp"
+          >
+            💬
+          </button>
+          <button className="text-[11px] font-mono font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors flex items-center">
+            🚩 REPORT_NODE
+          </button>
         </div>
-      )}
-
-      {/* Reviews Toggle Section */}
-      <div className="mt-6 border-t border-slate-100 pt-4">
-        <button 
-          onClick={() => setShowReviews(!showReviews)}
-          className="flex items-center justify-between w-full text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-colors"
+        
+        <a 
+          href={place.uri} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          onClick={(e) => e.stopPropagation()}
+          className={`w-full inline-flex items-center justify-center py-5 font-display font-black uppercase tracking-[0.3em] rounded-[1.5rem] transition-all text-[12px] shadow-2xl ${
+            place.isPromoted 
+              ? 'bg-slate-900 text-white dark:bg-white dark:text-brand-obsidian hover:bg-indigo-600 dark:hover:bg-indigo-100 hover:scale-[1.02]' 
+              : 'bg-indigo-600 text-white hover:bg-indigo-500 hover:scale-[1.02] shadow-indigo-500/20'
+          }`}
         >
-          <span>User Reviews ({reviews.length})</span>
-          <span>{showReviews ? '▴' : '▾'}</span>
-        </button>
-
-        {showReviews && (
-          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-            {/* Review List */}
-            <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-              {reviews.length === 0 ? (
-                <p className="text-[10px] text-slate-400 italic">No reviews yet. Be the first!</p>
-              ) : (
-                reviews.map((rev) => (
-                  <div key={rev.id} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-[9px] font-black text-slate-900">{rev.author}</span>
-                      <div className="flex text-amber-400 text-[8px]">
-                        {[...Array(5)].map((_, i) => (
-                          <span key={i}>{i < rev.rating ? '★' : '☆'}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-600 leading-normal">{rev.text}</p>
-                    <span className="text-[8px] text-slate-300 block mt-1">
-                      {new Date(rev.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Review Form */}
-            <form onSubmit={handleAddReview} className="mt-4 pt-4 border-t border-slate-50">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[9px] font-bold text-slate-500">Rate this place:</span>
-                <div className="flex space-x-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setNewReviewRating(star)}
-                      className={`text-sm transition-colors ${star <= newReviewRating ? 'text-amber-400' : 'text-slate-200'}`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <textarea
-                value={newReviewText}
-                onChange={(e) => setNewReviewText(e.target.value)}
-                placeholder="Share your experience..."
-                className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs text-slate-800 placeholder:text-slate-300 focus:ring-1 focus:ring-indigo-100 resize-none min-h-[60px]"
-              />
-              <button
-                type="submit"
-                disabled={isSubmitting || !newReviewText.trim()}
-                className="mt-2 w-full bg-white border border-slate-100 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all disabled:opacity-50"
-              >
-                {isSubmitting ? 'Posting...' : 'Submit Review'}
-              </button>
-            </form>
-          </div>
-        )}
+          {t('viewStore')}
+        </a>
       </div>
-      
-      {/* Action Row */}
-      {!isReporting && (
-        <div className="mt-6 flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-               <button 
-                onClick={(e) => handleSocialClick(e, shareLinks.facebook)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs"
-                title="Share on Facebook"
-              >
-                f
-              </button>
-              <button 
-                onClick={(e) => handleSocialClick(e, shareLinks.twitter)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-indigo-600 transition-all text-[10px]"
-                title="Share on X (Twitter)"
-              >
-                𝕏
-              </button>
-              <button 
-                onClick={(e) => handleSocialClick(e, shareLinks.whatsapp)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all text-sm"
-                title="Share on WhatsApp"
-              >
-                💬
-              </button>
-            </div>
-
-            <button 
-              onClick={(e) => { e.stopPropagation(); setIsReporting(true); }}
-              className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-rose-500 transition-colors flex items-center"
-              title="Report this place"
-            >
-              <span className="mr-1">🚩</span> Report
-            </button>
-          </div>
-
-          <div className="flex space-x-3">
-            <a 
-              href={place.uri} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              onClick={handleClick}
-              className={`flex-grow inline-flex items-center justify-center py-3 font-black uppercase tracking-widest rounded-2xl transition-all text-[11px] ${
-                place.isPromoted 
-                  ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:scale-105 shadow-xl shadow-indigo-200' 
-                  : 'bg-slate-900 text-white hover:bg-indigo-600'
-              }`}
-            >
-              View Store
-            </a>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

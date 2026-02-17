@@ -1,31 +1,22 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { searchLocalContent, fetchWeatherForLocation } from './services/geminiService';
-import { Location, SearchResponse, CATEGORIES, Category, WeatherData, PlaceResult, RecentPlace, SEARCH_SUGGESTIONS, MerchantRequest, InfoType, PlatformInsights } from './types';
+import { Location, SearchResponse, CATEGORIES, Category, WeatherData, PlaceResult, RecentPlace, SEARCH_SUGGESTIONS, MerchantRequest, InfoType, PlatformInsights, LanguageCode, LANGUAGES, TRANSLATIONS } from './types';
 import PlaceCard from './components/PlaceCard';
 import AdminPortal from './components/AdminPortal';
 import MapView from './components/MapView';
 import InfoModal from './components/InfoModal';
 import AIAgent from './components/AIAgent';
 
-const RECENT_STORAGE_KEY = 'nearby_recent_views';
-const MERCHANTS_STORAGE_KEY = 'nearby_merchants';
-const INSIGHTS_STORAGE_KEY = 'nearby_platform_insights';
 const FAVORITES_STORAGE_KEY = 'nearby_favorites';
-const ADMIN_PASSKEY = 'lujora2025';
-
-const DEFAULT_INSIGHTS: PlatformInsights = {
-  totalSearches: 0,
-  totalStoreClicks: 0,
-  categoryEngagement: {},
-  topSearchTerms: {},
-  dailyActivity: []
-};
+const LANG_STORAGE_KEY = 'nearby_language';
+const THEME_STORAGE_KEY = 'nearby_theme';
+const MERCHANTS_STORAGE_KEY = 'nearby_merchants';
 
 const DEFAULT_MERCHANTS: MerchantRequest[] = [
-  { id: '1', businessName: "Fresh Organics", status: 'active', bidAmount: 8.50, category: 'Food & Drink', appliedDate: '2024-03-10', billingStatus: 'paid' },
-  { id: '2', businessName: 'Global Tech Solutions', status: 'active', bidAmount: 5.75, category: 'Electronics', appliedDate: '2024-03-12', billingStatus: 'paid' },
-  { id: '3', businessName: 'Elite Medical Center', status: 'active', bidAmount: 12.20, category: 'Medical', appliedDate: '2024-02-28', billingStatus: 'paid' },
+  { id: '1', businessName: "Fresh Organics", status: 'active', bidAmount: 1500, category: 'Food & Drink', appliedDate: '2024-03-10', billingStatus: 'paid' },
+  { id: '2', businessName: 'Global Tech Solutions', status: 'active', bidAmount: 1200, category: 'Electronics', appliedDate: '2024-03-12', billingStatus: 'paid' },
+  { id: '3', businessName: 'Elite Medical Center', status: 'active', bidAmount: 2500, category: 'Medical', appliedDate: '2024-02-28', billingStatus: 'paid' },
 ];
 
 const App: React.FC = () => {
@@ -34,451 +25,341 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
-  
+  const [language, setLanguage] = useState<LanguageCode>('en');
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isPasskeyPromptOpen, setIsPasskeyPromptOpen] = useState(false);
   const [passkeyInput, setPasskeyInput] = useState('');
-  const [passkeyError, setPasskeyError] = useState(false);
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
-  
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
+  const [activeInfo, setActiveInfo] = useState<InfoType | null>(null);
+  const [merchants, setMerchants] = useState<MerchantRequest[]>([]);
+  const [favorites, setFavorites] = useState<PlaceResult[]>([]);
   const [logoClicks, setLogoClicks] = useState(0);
   const clickTimerRef = useRef<any>(null);
 
-  const [viewMode, setViewMode] = useState('grid');
-  const [activeInfo, setActiveInfo] = useState<InfoType | null>(null);
-  const [recentPlaces, setRecentPlaces] = useState<RecentPlace[]>([]);
-  const [merchants, setMerchants] = useState<MerchantRequest[]>([]);
-  const [favorites, setFavorites] = useState<PlaceResult[]>([]);
-  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const t = (key: string) => TRANSLATIONS[language][key] || key;
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'admin') {
-      setIsPasskeyPromptOpen(true);
-      window.history.replaceState({}, document.title, window.location.pathname);
+    const storedLang = localStorage.getItem(LANG_STORAGE_KEY) as LanguageCode;
+    if (storedLang) setLanguage(storedLang);
+
+    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY) as 'light' | 'dark';
+    if (storedTheme) {
+      setTheme(storedTheme);
+      if (storedTheme === 'dark') document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
     }
 
-    const storedRecent = localStorage.getItem(RECENT_STORAGE_KEY);
-    if (storedRecent) {
-      try { setRecentPlaces(JSON.parse(storedRecent)); } catch (e) { console.error(e); }
-    }
-
-    const storedFavorites = localStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (storedFavorites) {
-      try { setFavorites(JSON.parse(storedFavorites)); } catch (e) { console.error(e); }
-    }
-
+    const storedFavs = localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (storedFavs) setFavorites(JSON.parse(storedFavs));
     const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
-    if (storedMerchants) {
-      try { 
-        const parsed = JSON.parse(storedMerchants);
-        setMerchants(Array.isArray(parsed) ? parsed : DEFAULT_MERCHANTS);
-      } catch (e) { 
-        setMerchants(DEFAULT_MERCHANTS); 
-      }
-    } else {
-      setMerchants(DEFAULT_MERCHANTS);
-      localStorage.setItem(MERCHANTS_STORAGE_KEY, JSON.stringify(DEFAULT_MERCHANTS));
-    }
-  }, []);
+    setMerchants(storedMerchants ? JSON.parse(storedMerchants) : DEFAULT_MERCHANTS);
 
-  const trackInsight = useCallback((type: 'search' | 'click', value?: string) => {
-    const insightsStr = localStorage.getItem(INSIGHTS_STORAGE_KEY);
-    let insights: PlatformInsights = insightsStr ? JSON.parse(insightsStr) : { ...DEFAULT_INSIGHTS };
-    
-    const today = new Date().toISOString().split('T')[0];
-    let dailyEntry = insights.dailyActivity.find(d => d.date === today);
-    if (!dailyEntry) {
-      dailyEntry = { date: today, searches: 0, clicks: 0 };
-      insights.dailyActivity.push(dailyEntry);
-    }
-
-    if (type === 'search') {
-      insights.totalSearches += 1;
-      dailyEntry.searches += 1;
-      if (value) {
-        const key = value.toLowerCase().trim();
-        insights.topSearchTerms[key] = (insights.topSearchTerms[key] || 0) + 1;
-      }
-    } else if (type === 'click') {
-      insights.totalStoreClicks += 1;
-      dailyEntry.clicks += 1;
-      if (value) {
-        insights.categoryEngagement[value] = (insights.categoryEngagement[value] || 0) + 1;
-      }
-    }
-
-    insights.dailyActivity = insights.dailyActivity.slice(-30);
-    localStorage.setItem(INSIGHTS_STORAGE_KEY, JSON.stringify(insights));
-  }, []);
-
-  const handleLogoClick = () => {
-    const newCount = logoClicks + 1;
-    setLogoClicks(newCount);
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-    if (newCount >= 5) {
-      setIsPasskeyPromptOpen(true);
-      setLogoClicks(0);
-    } else {
-      clickTimerRef.current = setTimeout(() => { setLogoClicks(0); }, 3000);
-    }
-  };
-
-  const refreshLocation = useCallback(() => {
     if (navigator.geolocation) {
-      setLocationStatus('requesting');
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const newLoc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-          setLocation(newLoc);
-          setLocationStatus('granted');
-          fetchWeatherForLocation(newLoc).then(setWeather);
-        },
-        () => setLocationStatus('denied'),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          setLocation(loc);
+          fetchWeatherForLocation(loc, language).then(setWeather);
+        }
       );
-    } else {
-      setLocationStatus('denied');
     }
   }, []);
 
-  useEffect(() => {
-    refreshLocation();
-  }, [refreshLocation]);
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    if (newTheme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  };
+
+  const handleLanguageChange = (newLang: LanguageCode) => {
+    setLanguage(newLang);
+    localStorage.setItem(LANG_STORAGE_KEY, newLang);
+    if (location) fetchWeatherForLocation(location, newLang).then(setWeather);
+  };
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setQuery(searchQuery);
-    trackInsight('search', searchQuery);
+    const res = await searchLocalContent(searchQuery, location, language);
     
-    const res = await searchLocalContent(searchQuery, location);
-    
-    const matchedMerchants = (merchants || [])
-      .filter(m => m.status === 'active' && (
-        searchQuery.toLowerCase().includes((m.category || '').toLowerCase()) || 
-        (m.businessName || '').toLowerCase().includes(searchQuery.toLowerCase())
-      ))
-      .sort((a, b) => (b.bidAmount || 0) - (a.bidAmount || 0));
-
-    const localPlaces: PlaceResult[] = matchedMerchants.map(m => ({
-      title: m.businessName,
-      uri: `https://www.google.com/maps/search/${encodeURIComponent(m.businessName)}`,
-      isPromoted: m.bidAmount > 5,
-      isVerified: m.billingStatus === 'paid',
-      type: 'market',
-      distance: 'Verified Partner'
+    const promoted = merchants.filter(m => 
+      m.status === 'active' && 
+      (m.businessName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+       m.category.toLowerCase().includes(searchQuery.toLowerCase()))
+    ).map(m => ({ 
+      title: m.businessName, 
+      uri: "#", 
+      type: 'market' as const, 
+      isPromoted: true, 
+      isVerified: true, 
+      distance: "PARTNER" 
     }));
 
-    res.places = [...localPlaces, ...res.places];
-    setResult(res);
+    setResult({ text: res.text, places: [...promoted, ...res.places] });
     setLoading(false);
-  }, [location, merchants, trackInsight]);
-
-  const onCategoryClick = (category: Category) => {
-    handleSearch(`Find the best ${category.label} shops and services`);
-    trackInsight('click', category.id);
-  };
-
-  const toggleFavorite = (place: PlaceResult) => {
-    setFavorites(prev => {
-      const isAlreadyFav = prev.find(p => p.uri === place.uri);
-      let updated;
-      if (isAlreadyFav) {
-        updated = prev.filter(p => p.uri !== place.uri);
-      } else {
-        updated = [place, ...prev];
-      }
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const handleViewPlace = (place: PlaceResult) => {
-    trackInsight('click', place.type || 'unknown');
-    const newRecent: RecentPlace = { ...place, viewedAt: Date.now() };
-    setRecentPlaces(prev => {
-      const filtered = prev.filter(p => p.uri !== place.uri);
-      const updated = [newRecent, ...filtered].slice(0, 6);
-      localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const handlePasskeySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsAuthorizing(true);
+    // Smooth scroll to results
     setTimeout(() => {
-      if (passkeyInput.trim() === ADMIN_PASSKEY) {
-        setPasskeyError(false);
-        setIsPasskeyPromptOpen(false);
-        setIsAdminOpen(true);
-        setPasskeyInput('');
-      } else {
-        setPasskeyError(true);
-        setTimeout(() => setPasskeyError(false), 2000);
-      }
-      setIsAuthorizing(false);
-    }, 400);
-  };
+      document.getElementById('results-hub')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }, [location, language, merchants]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 relative">
-      <header className="sticky top-0 z-50 glass-effect">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={handleLogoClick}
-              className={`w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center shadow-2xl transition-all active:scale-90 ${logoClicks > 2 ? 'ring-2 ring-indigo-500' : ''}`}
-            >
-              <span className="text-white font-black text-2xl select-none">N</span>
-            </button>
-            <h1 className="brand-font text-2xl font-black text-slate-800 tracking-tighter">NEAR<span className="text-indigo-600">BY</span></h1>
+    <div className="min-h-screen selection:bg-indigo-500/30 transition-colors duration-500">
+      {/* Global Status HUD */}
+      <div className="fixed top-0 left-0 w-full z-[110] px-10 py-3 flex justify-between pointer-events-none">
+        <div className="flex space-x-6">
+          <div className="flex items-center space-x-2 glass-panel px-3 py-1.5 rounded-full border-black/5 dark:border-white/5 shadow-sm">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">System_Live</span>
           </div>
-          <div className="flex items-center space-x-2">
-            {locationStatus === 'granted' && weather && (
-              <div className="hidden lg:flex items-center space-x-3 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm">
-                <span className="text-2xl">{weather.emoji}</span>
-                <div className="text-left">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{weather.locationName}</p>
-                  <p className="text-xs font-black text-slate-800">{weather.temp}</p>
-                </div>
-              </div>
-            )}
-            
-            <button 
-              onClick={() => setIsFavoritesOpen(true)}
-              className="relative w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-rose-500 hover:bg-rose-50 shadow-sm transition-all"
-            >
-              ❤️
-              {favorites.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-white animate-bounce">
-                  {favorites.length}
-                </span>
-              )}
-            </button>
-
-            <button onClick={refreshLocation} className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-indigo-600 shadow-sm transition-all">
-              {locationStatus === 'requesting' ? '⌛' : '🛰️'}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Favorites Sidebar Drawer */}
-      {isFavoritesOpen && (
-        <div className="fixed inset-0 z-[1000] flex justify-end">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsFavoritesOpen(false)}></div>
-          <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
-              <div>
-                <h3 className="text-xl font-black brand-font tracking-tight">Your Favorites</h3>
-                <p className="text-indigo-300 text-[10px] font-black uppercase tracking-widest mt-1">Saved Collections</p>
-              </div>
-              <button onClick={() => setIsFavoritesOpen(false)} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all font-bold">✕</button>
-            </div>
-            
-            <div className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar">
-              {favorites.length > 0 ? (
-                favorites.map((fav) => (
-                  <PlaceCard 
-                    key={fav.uri} 
-                    place={fav} 
-                    compact 
-                    isFavorite={true}
-                    onToggleFavorite={toggleFavorite}
-                    onView={(p) => {
-                      setIsFavoritesOpen(false);
-                      handleViewPlace(p);
-                    }}
-                  />
-                ))
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-12 space-y-6">
-                  <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-5xl">❤️</div>
-                  <div>
-                    <h4 className="font-black text-slate-800 mb-2">No favorites saved</h4>
-                    <p className="text-slate-400 text-xs font-medium">Click the heart icon on any business card to save it for later.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="p-8 bg-slate-50 border-t border-slate-100">
-               <button 
-                onClick={() => setIsFavoritesOpen(false)}
-                className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all"
-               >
-                 Keep Exploring
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <main className="flex-grow">
-        <div className="max-w-5xl mx-auto px-6 pt-16 pb-12">
-          <div className="text-center mb-12">
-            <h2 className="text-5xl md:text-7xl font-black text-slate-900 mb-6 tracking-tighter leading-[0.9]">
-              Find any <span className="text-indigo-600">Market</span><br/>or <span className="text-amber-500">Service</span> near you.
-            </h2>
-            <p className="text-slate-500 text-lg max-w-xl mx-auto font-medium">Global AI discovery. Real-time market data. Verified trust.</p>
-          </div>
-
-          <div className="relative mb-6">
-            <div className="flex items-center bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-100 p-3 border-4 border-transparent focus-within:border-indigo-100 transition-all">
-              <span className="pl-6 text-2xl">🔍</span>
-              <input
-                type="text"
-                placeholder="Ex: 'Plumbers', 'Italian food', 'Art galleries'..."
-                className="flex-grow bg-transparent border-none focus:ring-0 py-5 px-6 text-slate-800 placeholder:text-slate-300 font-bold text-xl tracking-tight"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch(query)}
-              />
-              <button onClick={() => handleSearch(query)} disabled={loading} className="bg-slate-900 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-indigo-600 transition-all disabled:opacity-50">
-                {loading ? 'Analyzing...' : 'Explore Now'}
-              </button>
-            </div>
-          </div>
-
-          {!result && !loading && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-              {CATEGORIES.map((cat) => (
-                <button key={cat.id} onClick={() => onCategoryClick(cat)} className="bg-white border border-slate-100 p-6 rounded-[2.5rem] flex flex-col items-center justify-center hover:border-indigo-200 hover:shadow-xl transition-all group aspect-square">
-                  <span className="text-4xl mb-3 group-hover:scale-125 transition-transform">{cat.icon}</span>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{cat.label}</span>
-                </button>
-              ))}
+          {location && (
+            <div className="hidden sm:flex items-center space-x-2 glass-panel px-3 py-1.5 rounded-full border-black/5 dark:border-white/5 shadow-sm">
+              <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">
+                LOC: {location.latitude.toFixed(2)}, {location.longitude.toFixed(2)}
+              </span>
             </div>
           )}
         </div>
+        {weather && (
+          <div className="flex items-center space-x-2 glass-panel px-3 py-1.5 rounded-full border-black/5 dark:border-white/5 shadow-sm">
+            <span className="text-[12px]">{weather.emoji}</span>
+            <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">{weather.temp}</span>
+          </div>
+        )}
+      </div>
 
-        {(loading || result) && (
-          <div className="max-w-7xl mx-auto px-6 pb-24">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center py-20 space-y-6">
-                <div className="w-20 h-20 border-8 border-indigo-50 border-t-slate-900 rounded-full animate-spin"></div>
-                <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-xs">AI Discovery Pulse Active</p>
+      <nav className="sticky top-0 z-[100] px-10 py-8 glass-panel border-b border-black/5 dark:border-white/5 flex justify-between items-center transition-all">
+        <div 
+          className="flex items-center space-x-5 cursor-pointer group"
+          onClick={() => {
+            setLogoClicks(c => c + 1);
+            if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+            if (logoClicks + 1 >= 5) { setIsPasskeyPromptOpen(true); setLogoClicks(0); }
+            else clickTimerRef.current = setTimeout(() => setLogoClicks(0), 2000);
+          }}
+        >
+          <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[1.2rem] flex items-center justify-center font-display font-black text-white text-3xl brand-glow group-hover:rotate-12 transition-all duration-500 shadow-2xl">
+            N
+          </div>
+          <div>
+            <span className="text-3xl font-display font-black tracking-tighter text-slate-900 dark:text-white block leading-none">NEARBY</span>
+            <span className="text-[9px] font-mono font-black text-indigo-500 dark:text-indigo-400 tracking-[0.4em] uppercase">Discovery Node</span>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center glass-panel rounded-2xl p-1 space-x-2 border-black/5 dark:border-white/10 shadow-sm">
+            <select 
+              value={language} 
+              onChange={(e) => handleLanguageChange(e.target.value as LanguageCode)} 
+              className="bg-transparent rounded-xl px-4 py-2 text-[11px] font-mono font-black uppercase tracking-widest text-slate-700 dark:text-white outline-none cursor-pointer"
+            >
+              {LANGUAGES.map(l => <option key={l.code} value={l.code} className="bg-white dark:bg-brand-obsidian">{l.flag} {l.label}</option>)}
+            </select>
+            <button onClick={toggleTheme} className="w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:bg-black/5 dark:hover:bg-white/10 text-lg">
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-10 pt-20 pb-40">
+        {/* Immersive Hero Section */}
+        <section className="relative mb-40 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/10 dark:bg-indigo-500/20 blur-[150px] rounded-full -z-10 animate-neural-pulse"></div>
+          
+          <div className="text-center relative z-10">
+            <div className="inline-flex items-center space-x-3 bg-indigo-500/10 border border-indigo-500/20 px-6 py-2 rounded-full mb-10">
+              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-ping"></span>
+              <span className="text-[10px] font-mono font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.3em]">
+                {language === 'pidgin' ? 'WETIN DEY AREA?' : 'AI-POWERED LOCAL PULSE'}
+              </span>
+            </div>
+            
+            <h1 className="text-7xl md:text-[9rem] font-display font-black tracking-tighter mb-10 leading-[0.8] text-slate-900 dark:text-white">
+               {language === 'pidgin' ? 'ANYTIN' : 'EVERYTHING'}<br/>
+               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-400 dark:from-indigo-400 dark:via-violet-400 dark:to-indigo-300">
+                 {language === 'pidgin' ? 'NA HERE.' : 'ANYWHERE.'}
+               </span>
+            </h1>
+            
+            <p className="text-slate-500 dark:text-slate-400 max-w-xl mx-auto text-xl font-medium tracking-tight leading-relaxed mb-20">
+              {t('heroSub')}
+            </p>
+
+            {/* Hub Search Bar */}
+            <div className="max-w-4xl mx-auto group">
+              <div className="relative p-2 bg-white/50 dark:bg-slate-900/50 rounded-[3.5rem] shadow-[0_20px_80px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_80px_rgba(0,0,0,0.4)] backdrop-blur-3xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-700 group-focus-within:ring-indigo-500/40">
+                <input 
+                  type="text" 
+                  placeholder={t('searchPlaceholder')}
+                  className="w-full bg-white dark:bg-brand-obsidian border-none rounded-[3.3rem] px-14 py-8 text-2xl font-display font-black outline-none placeholder:text-slate-300 dark:placeholder:text-slate-800 text-slate-900 dark:text-white transition-all"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch(query)}
+                />
+                <button 
+                  onClick={() => handleSearch(query)}
+                  disabled={loading}
+                  className="absolute right-4 top-4 bottom-4 bg-indigo-600 text-white px-12 rounded-[2.8rem] font-display font-black uppercase tracking-[0.2em] text-[13px] shadow-2xl shadow-indigo-600/30 hover:bg-slate-900 dark:hover:bg-white dark:hover:text-brand-obsidian hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {loading ? '...' : t('exploreBtn')}
+                </button>
               </div>
-            ) : result && (
-              <div className="space-y-12">
-                <div className="bg-white rounded-[3.5rem] p-10 md:p-16 shadow-2xl border border-slate-100 relative overflow-hidden">
-                   <div className="relative z-10 flex flex-col lg:flex-row gap-12 items-start">
-                     <div className="flex-grow">
-                        <div className="flex items-center space-x-3 mb-6">
-                          <span className="bg-indigo-600 text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">AI Concierge Analysis</span>
-                        </div>
-                        <p className="text-slate-600 leading-relaxed text-2xl font-medium tracking-tight">{result.text}</p>
-                     </div>
-                     <div className="shrink-0 flex items-center bg-slate-100 p-2 rounded-[2rem]">
-                        <button onClick={() => setViewMode('grid')} className={`px-8 py-4 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400'}`}>Grid Feed</button>
-                        <button onClick={() => setViewMode('map')} className={`px-8 py-4 rounded-3xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'map' ? 'bg-white text-slate-900 shadow-xl' : 'text-slate-400'}`}>Map Overlay</button>
-                     </div>
-                   </div>
-                </div>
-                {viewMode === 'grid' ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {result.places.map((place, idx) => (
-                      <PlaceCard 
-                        key={idx} 
-                        place={place} 
-                        onView={handleViewPlace} 
-                        isFavorite={!!favorites.find(f => f.uri === place.uri)}
-                        onToggleFavorite={toggleFavorite}
-                      />
-                    ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Visual Category Bento Grid */}
+        {!result && !loading && (
+          <section className="animate-in fade-in slide-in-from-bottom-12 duration-1000 delay-300">
+            <div className="flex justify-between items-end mb-12">
+              <div>
+                <h2 className="text-4xl font-display font-black tracking-tight text-slate-900 dark:text-white">{t('gridFeed')}</h2>
+                <p className="text-slate-500 dark:text-slate-400 font-medium">{language === 'pidgin' ? 'Select where you wan check' : 'Jump directly into local sectors'}</p>
+              </div>
+              <div className="hidden sm:flex space-x-2">
+                 <button onClick={() => setActiveInfo('economics')} className="px-5 py-2 glass-panel rounded-full text-[9px] font-mono font-black text-slate-400 hover:text-indigo-500 transition-colors uppercase tracking-widest">Platform_Stats</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {CATEGORIES.map((cat, i) => (
+                <button 
+                  key={cat.id} 
+                  onClick={() => { setQuery(cat.label); handleSearch(cat.label); }}
+                  className={`group relative h-64 rounded-[2.5rem] overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl flex flex-col items-center justify-center space-y-4 ${
+                    i % 4 === 0 ? 'md:col-span-2' : ''
+                  } glass-panel border-black/5 dark:border-white/5`}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="text-5xl group-hover:scale-125 transition-transform duration-500">{cat.icon}</div>
+                  <div className="text-center z-10">
+                    <h4 className="text-[13px] font-display font-black uppercase tracking-[0.2em] text-slate-900 dark:text-white">{t(`cat_${cat.id}`)}</h4>
+                    <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">Launch_Node</span>
                   </div>
-                ) : (
-                  <MapView places={result.places} userLocation={location} weather={weather} />
-                )}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {loading && (
+          <div className="flex flex-col items-center py-32 space-y-8">
+            <div className="w-32 h-1.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden relative">
+               <div className="w-full h-full bg-indigo-500 absolute animate-scanline-fast"></div>
+            </div>
+            <p className="text-[11px] font-mono font-black uppercase tracking-[0.6em] text-indigo-500 animate-pulse">{t('analyzing')}</p>
+          </div>
+        )}
+
+        {/* Results Hub */}
+        {result && (
+          <div id="results-hub" className="space-y-32 pt-10 animate-in fade-in zoom-in-95 duration-1000">
+            <div className="glass-panel rounded-[3.5rem] p-12 lg:p-16 border-black/5 dark:border-white/10 shadow-inner relative overflow-hidden">
+              <div className="absolute -top-24 -left-24 w-64 h-64 bg-indigo-500/5 blur-[80px] rounded-full"></div>
+              <div className="flex items-center space-x-6 mb-12">
+                <div className="w-16 h-16 bg-indigo-600 rounded-[1.8rem] flex items-center justify-center text-white text-3xl shadow-2xl brand-glow">✨</div>
+                <div>
+                  <h3 className="text-4xl font-display font-black tracking-tight text-slate-900 dark:text-white">{t('conciergeTitle')}</h3>
+                  <p className="text-[10px] font-mono font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest mt-1">Direct Insight Stream</p>
+                </div>
               </div>
+              <div className="text-slate-600 dark:text-slate-300 text-xl leading-relaxed font-medium prose dark:prose-invert max-w-none prose-indigo">
+                {result.text}
+              </div>
+            </div>
+
+            <div className="flex justify-center">
+              <div className="glass-panel p-2 rounded-[2rem] flex space-x-4 border-black/5 dark:border-white/5">
+                <button onClick={() => setViewMode('grid')} className={`px-12 py-5 rounded-[1.5rem] text-[11px] font-mono font-black uppercase tracking-[0.3em] transition-all ${viewMode === 'grid' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:text-indigo-600 dark:hover:text-white'}`}>{t('gridFeed')}</button>
+                <button onClick={() => setViewMode('map')} className={`px-12 py-5 rounded-[1.5rem] text-[11px] font-mono font-black uppercase tracking-[0.3em] transition-all ${viewMode === 'map' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:text-indigo-600 dark:hover:text-white'}`}>{t('mapOverlay')}</button>
+              </div>
+            </div>
+
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                {result.places.map((p, idx) => (
+                  <PlaceCard 
+                    key={idx} 
+                    place={p} 
+                    language={language} 
+                    isFavorite={favorites.some(f => f.uri === p.uri && f.title === p.title)}
+                    onToggleFavorite={(pl) => {
+                      const exists = favorites.find(f => f.uri === pl.uri);
+                      const updated = exists ? favorites.filter(f => f.uri !== pl.uri) : [...favorites, pl];
+                      setFavorites(updated);
+                      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated));
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <MapView places={result.places} userLocation={location} weather={weather} language={language} />
             )}
+            
+            <div className="text-center pt-20">
+               <button onClick={() => { setResult(null); setQuery(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="px-10 py-5 glass-panel rounded-[2rem] text-[11px] font-mono font-black uppercase tracking-[0.3em] text-slate-400 hover:text-indigo-600 hover:border-indigo-500/30 transition-all">
+                  {t('keepExploring')}
+               </button>
+            </div>
           </div>
         )}
       </main>
 
-      <footer className="bg-white border-t border-slate-200 pt-20 pb-12">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-12 mb-16">
-          <div className="space-y-6">
-             <div className="flex items-center space-x-3">
-               <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center font-black text-white text-lg">N</div>
-               <span className="brand-font font-black text-2xl tracking-tighter">NEAR<span className="text-indigo-600">BY</span></span>
-             </div>
-             <p className="text-slate-400 text-sm font-medium leading-relaxed">The global discovery layer powered by Gemini. Connecting intent with local opportunity.</p>
+      <footer className="bg-slate-50 dark:bg-brand-obsidian text-slate-900 dark:text-white pt-48 pb-24 border-t border-black/5 dark:border-white/5 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-10 grid grid-cols-1 md:grid-cols-4 gap-24 relative z-10">
+          <div className="space-y-10">
+            <h2 className="text-5xl font-display font-black tracking-tighter">NEARBY</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-lg leading-relaxed font-medium">{t('heroSub')}</p>
+            <button onClick={() => navigator.clipboard.writeText(window.location.href)} className="px-10 py-5 bg-indigo-600 text-white dark:bg-white dark:text-brand-obsidian rounded-[1.5rem] text-[11px] font-mono font-black uppercase tracking-[0.3em] hover:scale-105 transition-all shadow-2xl">{t('invite')}</button>
           </div>
-          <div className="space-y-6">
-             <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em]">Business Partners</h4>
-             <ul className="space-y-4">
-               <li><button onClick={() => setActiveInfo('contact')} className="text-slate-500 hover:text-indigo-600 text-sm font-bold transition-colors">Apply for Verification</button></li>
-               <li><button onClick={() => setActiveInfo('economics')} className="text-slate-500 hover:text-indigo-600 text-sm font-bold transition-colors">Bidding Model</button></li>
-               <li><button onClick={() => setActiveInfo('help')} className="text-slate-500 hover:text-indigo-600 text-sm font-bold transition-colors">Partner Help Center</button></li>
-             </ul>
+          <div>
+            <h4 className="text-[12px] font-mono font-black uppercase tracking-[0.4em] text-indigo-600 dark:text-indigo-400 mb-10">{t('bizPartners')}</h4>
+            <ul className="space-y-6 text-slate-500 dark:text-slate-400 text-[13px] font-bold">
+              <li className="hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer" onClick={() => setActiveInfo('contact')}>{t('applyVerify')}</li>
+              <li className="hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer" onClick={() => setActiveInfo('economics')}>{t('biddingModel')}</li>
+            </ul>
           </div>
-          <div className="space-y-6">
-             <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.3em]">Lujora Core</h4>
-             <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                <p className="text-slate-800 font-black text-sm mb-1">Lujora Technologies</p>
-                <p className="text-slate-400 text-xs font-medium">Global AI Solutions</p>
-             </div>
+          <div>
+            <h4 className="text-[12px] font-mono font-black uppercase tracking-[0.4em] text-indigo-600 dark:text-indigo-400 mb-10">SYSTEM</h4>
+            <ul className="space-y-6 text-slate-500 dark:text-slate-400 text-[13px] font-bold">
+              <li className="hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer" onClick={() => setActiveInfo('infrastructure')}>ARCH_DOCS</li>
+              <li className="hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer" onClick={() => setActiveInfo('terms')}>LEGAL_CORE</li>
+            </ul>
+          </div>
+          <div className="md:text-right flex flex-col justify-end">
+            <p className="text-slate-400 dark:text-slate-700 text-[11px] font-mono font-black uppercase tracking-[0.6em] mb-4">BUILD_2025.04.1</p>
+            <p className="text-slate-400 dark:text-slate-500 text-[11px] font-mono font-black uppercase tracking-[0.4em]">&copy; LUJORA_TECH_INTL</p>
           </div>
         </div>
       </footer>
 
+      {isAdminOpen && <AdminPortal merchants={merchants} setMerchants={setMerchants} onClose={() => setIsAdminOpen(false)} language={language} />}
       {isPasskeyPromptOpen && (
-        <div className="fixed inset-0 z-[10001] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-4 overflow-hidden">
-          <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-slate-100 transform transition-all">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">🔒</div>
-              <h3 className="text-xl font-black text-slate-800">SuperAdmin Access</h3>
-              <p className="text-slate-400 text-xs mt-1">Enter master passkey for Lujora Hub</p>
+        <div className="fixed inset-0 z-[1000] glass-panel backdrop-blur-3xl flex items-center justify-center p-8">
+          <form 
+            onSubmit={(e)=>{e.preventDefault(); if(passkeyInput==='lujora2025'){setIsAdminOpen(true);setIsPasskeyPromptOpen(false);setPasskeyInput('');} }} 
+            className="bg-white dark:bg-brand-obsidian border border-black/10 dark:border-white/10 p-16 rounded-[4rem] shadow-2xl max-w-xl w-full"
+          >
+            <h2 className="text-4xl font-display font-black text-slate-900 dark:text-white mb-10 tracking-tighter">NODE_AUTH</h2>
+            <input autoFocus type="password" placeholder="ENTER_ACCESS_CODE" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-black/5 dark:border-white/5 rounded-[1.8rem] px-10 py-6 mb-8 text-slate-900 dark:text-white text-xl font-mono outline-none focus:border-indigo-500 transition-all text-center tracking-[0.5em]" value={passkeyInput} onChange={(e) => setPasskeyInput(e.target.value)} />
+            <div className="flex space-x-6">
+              <button type="button" onClick={() => setIsPasskeyPromptOpen(false)} className="flex-1 py-6 bg-slate-100 dark:bg-white/5 text-slate-500 rounded-[1.8rem] text-[12px] font-mono font-black uppercase tracking-widest">ABORT</button>
+              <button type="submit" className="flex-1 py-6 bg-indigo-600 text-white rounded-[1.8rem] text-[12px] font-mono font-black uppercase tracking-widest shadow-2xl">AUTHORIZE</button>
             </div>
-            <form onSubmit={handlePasskeySubmit} className="space-y-4">
-              <input
-                autoFocus
-                type="password"
-                value={passkeyInput}
-                onChange={(e) => setPasskeyInput(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full py-4 px-6 bg-slate-50 border-2 rounded-2xl text-center text-xl font-black tracking-widest focus:outline-none transition-all ${
-                  passkeyError ? 'border-rose-500 animate-shake text-rose-500 bg-rose-50' : 'border-slate-100 focus:border-indigo-500'
-                }`}
-              />
-              <div className="flex space-x-3">
-                <button 
-                  type="button" 
-                  onClick={() => setIsPasskeyPromptOpen(false)}
-                  className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isAuthorizing}
-                  className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl shadow-slate-200 disabled:opacity-50"
-                >
-                  {isAuthorizing ? 'Authorizing...' : 'Authorize'}
-                </button>
-              </div>
-            </form>
-          </div>
+          </form>
         </div>
       )}
 
-      {isAdminOpen && (
-        <AdminPortal 
-          merchants={merchants} 
-          setMerchants={(m) => { 
-            setMerchants(m); 
-            localStorage.setItem(MERCHANTS_STORAGE_KEY, JSON.stringify(m)); 
-          }} 
-          onClose={() => setIsAdminOpen(false)} 
-        />
-      )}
-      
-      {activeInfo && <InfoModal type={activeInfo} onClose={() => setActiveInfo(null)} />}
-      <AIAgent userLocation={location} />
+      {activeInfo && <InfoModal type={activeInfo} onClose={() => setActiveInfo(null)} language={language} onMerchantApply={(m)=>{setMerchants([...merchants, {...m, id: Date.now().toString(), status: 'pending', appliedDate: new Date().toISOString().split('T')[0], billingStatus: 'trial'} as MerchantRequest]);}} />}
+      <AIAgent userLocation={location} selectedLanguage={language} onMessageSent={(m) => { setQuery(m); handleSearch(m); }} />
     </div>
   );
 };
